@@ -1,0 +1,376 @@
+"use client";
+
+import { Suspense, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useStoreConfig } from "@/config/store-config";
+import { useAdminAccess } from "@/lib/admin-access";
+import { useCart } from "@/lib/cart";
+import type { DemoSession } from "@/lib/session";
+
+type SiteHeaderProps = {
+  query: string;
+  onQueryChange: (value: string) => void;
+  onSearch?: (value: string) => void;
+  session: DemoSession | null;
+  onLogout: () => void;
+  onCart: () => void;
+};
+
+const links = [
+  { href: "/", label: "Inicio" },
+  { href: "/tienda", label: "Tienda" },
+  { href: "/tienda?vista=ofertas", label: "Ofertas" },
+  { href: "/servicio-tecnico", label: "Servicio técnico" },
+];
+
+function linkIsActive(pathname: string, vista: string | null, href: string, label: string) {
+  if (label === "Inicio") return pathname === "/";
+  if (label === "Tienda") return pathname === "/tienda" && vista !== "ofertas";
+  if (label === "Ofertas") return pathname === "/tienda" && vista === "ofertas";
+  return pathname === href;
+}
+
+export function SiteHeader({
+  query,
+  onQueryChange,
+  onSearch,
+  session,
+  onLogout,
+  onCart,
+}: SiteHeaderProps) {
+  const { config } = useStoreConfig();
+  const { count } = useCart();
+  const { isAdmin, setDevAdmin } = useAdminAccess(session);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+  const whatsappHref = `https://wa.me/${config.whatsapp}`;
+  useEffect(() => {
+    if (!accountOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountOpen(false);
+    };
+    window.addEventListener("mousedown", onPointer);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onPointer);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [accountOpen]);
+
+  const instagramHref = `https://instagram.com/${config.instagram}`;
+
+  return (
+    <header id="inicio" className="sticky top-0 z-30 w-full">
+      <TopTicker />
+      <div className="border-b border-white/10 bg-black">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:gap-6">
+        <Link href="/" className="shrink-0" aria-label="Movil zone, ir al inicio">
+          <img src="/brand/logo-lockup.png" alt="" className="h-16 w-auto sm:h-[4.5rem]" />
+        </Link>
+
+        <label className="relative block min-w-0 flex-1">
+          <span className="sr-only">Buscar productos</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && onSearch) onSearch(query);
+            }}
+            placeholder="Buscar productos, marcas..."
+            className="h-11 w-full rounded-full border border-white/15 bg-white/5 pr-12 pl-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-sky-400 focus:bg-white/10"
+          />
+          {onSearch ? (
+            <button
+              type="button"
+              aria-label="Buscar"
+              onClick={() => onSearch(query)}
+              className="absolute top-1/2 right-1.5 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-sky-500 text-white"
+            >
+              <SearchIcon />
+            </button>
+          ) : (
+            <span className="absolute top-1/2 right-1.5 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-sky-500 text-white">
+              <SearchIcon />
+            </span>
+          )}
+        </label>
+
+        <div className="flex items-center gap-1 self-end lg:self-auto">
+          {isAdmin ? (
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1.5 rounded-full bg-sky-500 px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-sky-400"
+            >
+              <GearIcon />
+              Panel Admin
+            </Link>
+          ) : null}
+          <div className="relative" ref={accountRef}>
+            <button
+              type="button"
+              aria-expanded={accountOpen}
+              aria-haspopup="menu"
+              onClick={() => setAccountOpen((open) => !open)}
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
+            >
+              <UserIcon />
+              {session ? session.name : "Mi cuenta"}
+            </button>
+            {accountOpen ? (
+              <div
+                role="menu"
+                className="absolute right-0 z-40 mt-2 w-64 rounded-2xl border border-white/10 bg-neutral-950 p-2 text-white shadow-xl"
+              >
+                {session ? (
+                  <>
+                    <p className="px-3 py-2 text-xs text-white/50">{session.email}</p>
+                    <Link
+                      href="/mi-cuenta"
+                      role="menuitem"
+                      onClick={() => setAccountOpen(false)}
+                      className="block rounded-xl px-3 py-2 text-sm font-medium hover:bg-white/10"
+                    >
+                      Mi cuenta
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/login"
+                      role="menuitem"
+                      onClick={() => setAccountOpen(false)}
+                      className="block rounded-xl px-3 py-2 text-sm font-medium hover:bg-white/10"
+                    >
+                      Iniciar sesión
+                    </Link>
+                    <Link
+                      href="/login"
+                      role="menuitem"
+                      onClick={() => setAccountOpen(false)}
+                      className="block rounded-xl px-3 py-2 text-sm font-medium hover:bg-white/10"
+                    >
+                      Crear cuenta
+                    </Link>
+                  </>
+                )}
+                <label className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
+                  <span>
+                    Modo administrador
+                    <span className="mt-0.5 block text-[11px] font-normal text-white/45">
+                      {session?.role === "admin" ? "Esta cuenta es administradora" : "Interruptor de prueba"}
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={isAdmin}
+                    disabled={session?.role === "admin"}
+                    onChange={(event) => setDevAdmin(event.target.checked)}
+                    className="h-4 w-4 accent-sky-500 disabled:opacity-70"
+                  />
+                </label>
+                {isAdmin ? (
+                  <Link
+                    href="/admin"
+                    role="menuitem"
+                    onClick={() => setAccountOpen(false)}
+                    className="block rounded-xl px-3 py-2 text-sm font-semibold text-sky-300 hover:bg-white/10"
+                  >
+                    Abrir Panel Admin
+                  </Link>
+                ) : null}
+                {session ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      onLogout();
+                    }}
+                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10"
+                  >
+                    Cerrar sesión
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onCart}
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
+          >
+            <CartIcon />
+            Carrito
+            {count > 0 ? (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-sky-500 px-1.5 text-[11px] font-bold text-white">
+                {count}
+              </span>
+            ) : null}
+          </button>
+        </div>
+      </div>
+
+      <nav className="border-t border-white/10" aria-label="Secciones">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-2 sm:px-6">
+          <SectionNav />
+          <div className="flex shrink-0 items-center gap-1">
+            <a
+              href={instagramHref}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Seguinos en Instagram"
+              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-extrabold tracking-wide text-white hover:bg-white/10 sm:px-3"
+            >
+              <InstagramIcon />
+              <span className="hidden sm:inline">Seguinos</span>
+            </a>
+            <a
+              href={whatsappHref}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Contactanos por WhatsApp"
+              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm font-extrabold tracking-wide text-[#25D366] hover:bg-white/10 sm:px-3"
+            >
+              <WhatsAppIcon />
+              <span className="hidden sm:inline">Contactanos</span>
+            </a>
+          </div>
+        </div>
+      </nav>
+      </div>
+    </header>
+  );
+}
+
+const tickerMessages = [
+  "🚚 Envíos en el día en General Pico y zona",
+  "💳 10% de descuento pagando por la tienda",
+  "🛠️ Servicio técnico especializado",
+];
+
+function TopTicker() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setIndex((current) => (current + 1) % tickerMessages.length);
+    }, 3500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="overflow-hidden bg-sky-500 text-white" role="status" aria-live="polite">
+      <p
+        key={index}
+        className="px-4 py-2 text-center text-sm font-semibold tracking-wide motion-safe:animate-[ticker-in_450ms_ease-out]"
+      >
+        {tickerMessages[index]}
+      </p>
+    </div>
+  );
+}
+
+function SectionNav() {
+  const pathname = usePathname();
+  return (
+    <Suspense fallback={<SectionLinks pathname={pathname} vista={null} />}>
+      <SectionLinksLive pathname={pathname} />
+    </Suspense>
+  );
+}
+
+function SectionLinksLive({ pathname }: { pathname: string }) {
+  const vista = useSearchParams().get("vista");
+  return <SectionLinks pathname={pathname} vista={vista} />;
+}
+
+function SectionLinks({ pathname, vista }: { pathname: string; vista: string | null }) {
+  return (
+    <div className="flex min-w-0 gap-1 overflow-x-auto">
+      {links.map((link) => {
+        const active = linkIsActive(pathname, vista, link.href, link.label);
+        return (
+          <Link
+            key={link.label}
+            href={link.href}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              active ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            {link.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <circle cx="8" cy="8" r="2" />
+      <path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <circle cx="7" cy="7" r="4" />
+      <path d="m10.2 10.2 2.6 2.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <circle cx="8" cy="5.5" r="2.2" />
+      <path d="M3.5 13.2c.7-2 2.3-3 4.5-3s3.8 1 4.5 3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function InstagramIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+      <defs>
+        <linearGradient id="ig-header" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stopColor="#f9ce34" />
+          <stop offset="50%" stopColor="#ee2a7b" />
+          <stop offset="100%" stopColor="#6228d7" />
+        </linearGradient>
+      </defs>
+      <rect x="4" y="4" width="16" height="16" rx="5" fill="none" stroke="url(#ig-header)" strokeWidth="1.8" />
+      <circle cx="12" cy="12" r="3.4" fill="none" stroke="url(#ig-header)" strokeWidth="1.8" />
+      <circle cx="17.2" cy="6.8" r="1" fill="url(#ig-header)" />
+    </svg>
+  );
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+      <path
+        fill="#25D366"
+        d="M12.04 2C6.58 2 2.15 6.4 2.15 11.83c0 1.74.46 3.44 1.34 4.94L2 22l5.39-1.41a10 10 0 0 0 4.65 1.18h.01c5.46 0 9.89-4.4 9.89-9.83C21.94 6.4 17.5 2 12.04 2zm5.76 13.9c-.24.68-1.4 1.25-1.93 1.33-.49.07-1.1.1-1.78-.11-.41-.13-.94-.3-1.62-.59-2.85-1.23-4.7-4.1-4.84-4.29-.14-.19-1.15-1.53-1.15-2.92 0-1.39.73-2.07 1-2.35.24-.26.64-.38.85-.38.21 0 .42 0 .6.01.19.01.45-.07.7.53.26.64.88 2.2.96 2.36.08.16.13.35.03.56-.1.21-.15.34-.3.52-.15.18-.31.4-.44.54-.15.15-.3.31-.13.6.17.3.76 1.25 1.63 2.03 1.12 1 2.06 1.31 2.36 1.46.3.15.47.13.65-.08.18-.2.75-.87.95-1.17.2-.3.4-.25.67-.15.27.1 1.72.81 2.01.96.3.15.49.22.56.34.07.13.07.73-.17 1.41z"
+      />
+    </svg>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path d="M3 4h1.2l1 6.5a.8.8 0 0 0 .8.6h5.4a.8.8 0 0 0 .8-.6L13.4 6H5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="6.5" cy="13" r=".8" fill="currentColor" stroke="none" />
+      <circle cx="11" cy="13" r=".8" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
