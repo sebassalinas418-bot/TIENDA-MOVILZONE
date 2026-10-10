@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AccountMenu } from "@/components/account-menu";
+import { MobileMenuButton } from "@/components/mobile-nav/store-mobile-chrome";
 import { useStoreConfig } from "@/config/store-config";
 import { useAdminAccess } from "@/lib/admin-access";
 import { useCart } from "@/lib/cart";
@@ -52,6 +53,7 @@ export function SiteHeader({
       <TopTicker />
       <div className="border-b border-white/10 bg-black">
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 sm:px-6 sm:py-3 lg:flex-nowrap lg:gap-6">
+        <MobileMenuButton />
         <Link href="/" className="shrink-0" aria-label="Movil zone, ir al inicio">
           <img src="/brand/logo-lockup.png" alt="" className="h-9 w-auto sm:h-14 lg:h-[4.5rem]" />
         </Link>
@@ -94,7 +96,9 @@ export function SiteHeader({
               Panel Admin
             </Link>
           ) : null}
-          <AccountMenu session={session} onLogout={onLogout} />
+          <span className="hidden lg:inline-flex">
+            <AccountMenu session={session} onLogout={onLogout} />
+          </span>
           <button
             type="button"
             onClick={onCart}
@@ -111,7 +115,7 @@ export function SiteHeader({
         </div>
       </div>
 
-      <nav className="border-t border-white/10" aria-label="Secciones">
+      <nav className="hidden border-t border-white/10 lg:block" aria-label="Secciones">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-1.5 sm:gap-4 sm:px-6 sm:py-2">
           <SectionNav />
           <div className="flex shrink-0 items-center gap-1">

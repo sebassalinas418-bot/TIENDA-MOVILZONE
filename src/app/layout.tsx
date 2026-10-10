@@ -5,6 +5,7 @@ import { CartProvider } from "@/lib/cart";
 import { CatalogProvider } from "@/lib/offers";
 import { OrdersProvider } from "@/lib/orders";
 import { CartDrawer } from "@/components/cart-drawer";
+import { StoreMobileChrome } from "@/components/mobile-nav/store-mobile-chrome";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,8 +26,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <OrdersProvider>
             <CatalogProvider>
               <CartProvider>
-                {children}
-                <CartDrawer />
+                <StoreMobileChrome>
+                  {children}
+                  <CartDrawer />
+                </StoreMobileChrome>
               </CartProvider>
             </CatalogProvider>
           </OrdersProvider>
