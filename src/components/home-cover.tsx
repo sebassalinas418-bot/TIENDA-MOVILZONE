@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatPrice } from "@/data/products";
 import { overlayCatalogStock } from "@/lib/web-pending-stock/availability";
-import { formatPublicHours, useStoreConfig } from "@/config/store-config";
+import { useStoreConfig } from "@/config/store-config";
+import { formatFooterHours } from "@/lib/store-footer-hours/format";
 import { useCatalog, type CatalogProduct } from "@/lib/offers";
 import { useOrders } from "@/lib/orders";
 import { ProductCard } from "@/components/product-card";
@@ -213,7 +214,7 @@ function RepairPlate() {
 
 function LocationPlate() {
   const { config } = useStoreConfig();
-  const hours = formatPublicHours(config.openingHours);
+  const hours = formatFooterHours(config.openingHours);
 
   return (
     <div className="h-full px-1 pt-1 sm:px-2 sm:pb-12">
@@ -245,17 +246,12 @@ function LocationPlate() {
           <div className="max-h-[7.5rem] w-full max-w-[15rem] self-center overflow-hidden rounded-2xl border border-white/15 bg-black/50 p-2 backdrop-blur-sm sm:max-h-none sm:p-3">
             <p className="text-[11px] font-bold tracking-[0.14em] text-sky-300 uppercase">Horarios de atención</p>
             <ul className="mt-1.5 space-y-1">
-              {hours.map((line) => {
-                const split = line.indexOf(": ");
-                const day = split === -1 ? line : line.slice(0, split);
-                const range = split === -1 ? "" : line.slice(split + 2);
-                return (
-                  <li key={line} className="text-xs leading-4">
-                    <span className="font-bold text-sky-300">{day}</span>
-                    {range ? <span className="mt-0.5 block font-medium text-white">{range}</span> : null}
-                  </li>
-                );
-              })}
+              {hours.map((line) => (
+                <li key={line.label} className="text-xs leading-4">
+                  <span className="font-bold text-sky-300">{line.label}</span>
+                  <span className="mt-0.5 block font-medium text-white">{line.shifts.join(" y ")}</span>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
