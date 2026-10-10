@@ -8,6 +8,7 @@ import { formatPublicHours, useStoreConfig } from "@/config/store-config";
 import { useCatalog, type CatalogProduct } from "@/lib/offers";
 import { useOrders } from "@/lib/orders";
 import { ProductCard } from "@/components/product-card";
+import { homeBannerMobile } from "@/lib/store-home-banner/mobile";
 
 const categoryRank: Record<string, number> = {
   cargadores: 0,
@@ -103,7 +104,11 @@ export function HomeSlider() {
             }}
           >
             {slides.map((slide) => (
-              <div key={slide.key} className="shrink-0" style={{ width: `${100 / SLIDES.length}%` }}>
+              <div
+                key={slide.key}
+                className={`shrink-0 ${homeBannerMobile.slide}`}
+                style={{ width: `${100 / SLIDES.length}%` }}
+              >
                 {slide}
               </div>
             ))}
@@ -113,7 +118,7 @@ export function HomeSlider() {
           type="button"
           onClick={() => step(-1)}
           aria-label="Banner anterior"
-          className="absolute top-1/2 left-3 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-gray-900 bg-white text-gray-900 shadow-md transition-transform duration-200 hover:-translate-y-[55%]"
+          className={`${homeBannerMobile.arrow} left-1.5 sm:left-3`}
         >
           <ArrowIcon direction="left" />
         </button>
@@ -121,11 +126,11 @@ export function HomeSlider() {
           type="button"
           onClick={() => step(1)}
           aria-label="Banner siguiente"
-          className="absolute top-1/2 right-3 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-gray-900 bg-white text-gray-900 shadow-md transition-transform duration-200 hover:-translate-y-[55%]"
+          className={`${homeBannerMobile.arrow} right-1.5 sm:right-3`}
         >
           <ArrowIcon direction="right" />
         </button>
-        <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
+        <div className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 gap-1.5 sm:bottom-3">
           {SLIDES.map((id, slideIndex) => (
             <button
               key={id}
@@ -146,22 +151,22 @@ export function HomeSlider() {
 
 function OffersPlate({ product }: { product: CatalogProduct | null }) {
   return (
-    <div className="grid min-h-[220px] text-gray-900 sm:min-h-[300px] lg:grid-cols-[1.15fr_0.85fr]">
-      <div className="px-4 py-5 pb-10 sm:px-10 sm:py-12">
-        <p className="text-xs font-bold tracking-[0.18em] text-sky-600 uppercase">Esta semana</p>
-        <h1 className="mt-2 max-w-md text-2xl font-bold tracking-tight text-neutral-950 sm:mt-3 sm:text-5xl">Ofertas de la semana</h1>
-        <p className="mt-3 max-w-md text-sm font-medium leading-6 text-neutral-800 sm:mt-4 sm:text-base sm:leading-7">
+    <div className="grid h-full min-h-0 text-gray-900 sm:min-h-[300px] lg:grid-cols-[1.15fr_0.85fr]">
+      <div className="px-4 py-4 sm:px-10 sm:py-12">
+        <p className="text-[10px] font-bold tracking-[0.18em] text-sky-600 uppercase sm:text-xs">Esta semana</p>
+        <h1 className="mt-1.5 max-w-md text-xl font-bold tracking-tight text-neutral-950 sm:mt-3 sm:text-5xl">Ofertas de la semana</h1>
+        <p className="mt-2 max-w-md text-xs font-medium leading-5 text-neutral-800 sm:mt-4 sm:text-base sm:leading-7">
           Un precio especial en accesorios del local. El valor tachado es el anterior y el destacado es pagando por transferencia.
         </p>
         <Link
           href="/tienda?vista=ofertas"
-          className="mt-6 inline-flex items-center gap-2 rounded-full bg-sky-500 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-sky-400"
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-sky-500 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-sky-400 sm:mt-6 sm:px-5 sm:py-2.5 sm:text-sm"
         >
           Ver todas
           <span aria-hidden="true">→</span>
         </Link>
       </div>
-      <div className="flex items-center justify-center px-5 py-8 pb-12 sm:px-8">
+      <div className="hidden items-center justify-center px-5 py-8 pb-12 sm:flex sm:px-8">
         {product ? <OfferSpotlight product={product} /> : (
           <p className="max-w-xs text-center text-base font-medium text-neutral-800">Esta semana no hay ofertas cargadas. Mirá el catálogo completo.</p>
         )}
@@ -175,27 +180,27 @@ function RepairPlate() {
   const href = `https://wa.me/${config.whatsapp}?text=${encodeURIComponent("Hola, quiero consultar por una reparación en Movil zone. ¿Me pueden pasar un presupuesto?")}`;
 
   return (
-    <div className="px-1 pt-1 pb-12 sm:px-2">
-      <div className="relative min-h-[220px] overflow-hidden rounded-2xl sm:min-h-[320px] sm:rounded-3xl">
+    <div className="h-full px-1 pt-1 sm:px-2 sm:pb-12">
+      <div className="relative h-full overflow-hidden rounded-2xl sm:min-h-[320px] sm:rounded-3xl">
         <img
           src="/banners/taller-reparacion.jpg"
           alt=""
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-black/88 via-black/75 to-black/45" />
-        <div className="relative z-10 flex min-h-[220px] flex-col justify-center px-4 py-6 sm:min-h-[320px] sm:px-10 sm:py-10 lg:max-w-2xl">
-          <p className="text-sm font-bold tracking-[0.16em] text-sky-300 uppercase">Taller del local</p>
-          <h2 className="mt-2 max-w-xl text-2xl font-bold tracking-tight text-white sm:mt-3 sm:text-5xl">
+        <div className="relative z-10 flex h-full min-h-0 flex-col justify-center px-4 py-4 sm:min-h-[320px] sm:px-10 sm:py-10 lg:max-w-2xl">
+          <p className="text-[10px] font-bold tracking-[0.16em] text-sky-300 uppercase sm:text-sm">Taller del local</p>
+          <h2 className="mt-1.5 max-w-xl text-xl font-bold tracking-tight text-white sm:mt-3 sm:text-5xl">
             Servicio técnico especializado
           </h2>
-          <p className="mt-4 max-w-lg text-lg font-medium leading-8 text-white">
+          <p className="mt-2 max-w-lg text-sm font-medium leading-5 text-white sm:mt-4 sm:text-lg sm:leading-8">
             Reparaciones en el acto: cambio de pantalla, pines de carga y diagnóstico de placa.
           </p>
           <a
             href={href}
             target="_blank"
             rel="noreferrer"
-            className="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-[#25D366] px-6 py-3.5 text-lg font-bold text-white shadow-lg transition-colors hover:bg-[#1ebe5d]"
+            className="mt-3 inline-flex w-fit items-center gap-2 rounded-full bg-[#25D366] px-4 py-2 text-sm font-bold text-white shadow-lg transition-colors hover:bg-[#1ebe5d] sm:mt-6 sm:px-6 sm:py-3.5 sm:text-lg"
           >
             Consultar reparación
           </a>
@@ -210,8 +215,8 @@ function LocationPlate() {
   const hours = formatPublicHours(config.openingHours);
 
   return (
-    <div className="px-1 pt-1 pb-12 sm:px-2">
-      <div className="relative min-h-[300px] overflow-hidden rounded-3xl">
+    <div className="h-full px-1 pt-1 sm:px-2 sm:pb-12">
+      <div className="relative h-full overflow-hidden rounded-2xl sm:min-h-[300px] sm:rounded-3xl">
         <video
           autoPlay
           muted
@@ -222,10 +227,10 @@ function LocationPlate() {
           src="/banners/local-frente.mp4?v=3"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/35 to-black/25" />
-        <div className="relative z-10 flex min-h-[300px] flex-col justify-center gap-4 px-5 py-5 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative z-10 flex h-full min-h-0 flex-col justify-center gap-2 overflow-hidden px-4 py-3 sm:min-h-[300px] sm:gap-4 sm:px-8 sm:py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 max-w-sm">
-            <p className="text-xs font-bold tracking-[0.16em] text-sky-300 uppercase">Horarios y ubicación</p>
-            <h2 className="mt-1.5 text-2xl font-bold tracking-tight text-white sm:text-3xl">Pasá por el local</h2>
+            <p className="text-[10px] font-bold tracking-[0.16em] text-sky-300 uppercase sm:text-xs">Horarios y ubicación</p>
+            <h2 className="mt-1 text-lg font-bold tracking-tight text-white sm:mt-1.5 sm:text-3xl">Pasá por el local</h2>
             <p className="mt-1.5 text-base font-bold leading-snug text-white">{config.location.title}</p>
             <p className="text-sm font-semibold text-sky-200">{config.location.detail}</p>
             <Link
@@ -236,7 +241,7 @@ function LocationPlate() {
               <span aria-hidden="true">→</span>
             </Link>
           </div>
-          <div className="w-full max-w-[15rem] self-center rounded-2xl border border-white/15 bg-black/50 p-3 backdrop-blur-sm">
+          <div className="max-h-[7.5rem] w-full max-w-[15rem] self-center overflow-hidden rounded-2xl border border-white/15 bg-black/50 p-2 backdrop-blur-sm sm:max-h-none sm:p-3">
             <p className="text-[11px] font-bold tracking-[0.14em] text-sky-300 uppercase">Horarios de atención</p>
             <ul className="mt-1.5 space-y-1">
               {hours.map((line) => {
@@ -260,22 +265,22 @@ function LocationPlate() {
 
 function PromoPlate({ product }: { product: CatalogProduct | null }) {
   return (
-    <div className="grid min-h-[220px] text-gray-900 sm:min-h-[300px] lg:grid-cols-[1.15fr_0.85fr]">
-      <div className="px-6 py-8 pb-12 sm:px-10 sm:py-12">
-        <p className="text-xs font-bold tracking-[0.18em] text-sky-600 uppercase">Promociones</p>
-        <h2 className="mt-3 max-w-md text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl">Promociones especiales</h2>
-        <p className="mt-4 max-w-md text-base font-medium leading-7 text-neutral-800">
+    <div className="grid h-full min-h-0 text-gray-900 sm:min-h-[300px] lg:grid-cols-[1.15fr_0.85fr]">
+      <div className="px-4 py-4 sm:px-10 sm:py-12">
+        <p className="text-[10px] font-bold tracking-[0.18em] text-sky-600 uppercase sm:text-xs">Promociones</p>
+        <h2 className="mt-1.5 max-w-md text-xl font-bold tracking-tight text-neutral-950 sm:mt-3 sm:text-5xl">Promociones especiales</h2>
+        <p className="mt-2 max-w-md text-xs font-medium leading-5 text-neutral-800 sm:mt-4 sm:text-base sm:leading-7">
           Cargadores, cables y accesorios con precio destacado por transferencia. Mirá lo que está en promo ahora.
         </p>
         <Link
           href="/tienda?vista=ofertas"
-          className="mt-6 inline-flex items-center gap-2 rounded-full bg-sky-500 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-sky-400"
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-sky-500 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-sky-400 sm:mt-6 sm:px-5 sm:py-2.5 sm:text-sm"
         >
           Ver promociones
           <span aria-hidden="true">→</span>
         </Link>
       </div>
-      <div className="flex items-center justify-center px-5 py-8 pb-12 sm:px-8">
+      <div className="hidden items-center justify-center px-5 py-8 pb-12 sm:flex sm:px-8">
         {product ? <OfferSpotlight product={product} /> : (
           <img src="/banners/accesorios-cargadores.jpg" alt="Accesorios y cargadores en promoción" className="h-44 w-full max-w-sm rounded-3xl object-cover shadow-xl sm:h-52" />
         )}
