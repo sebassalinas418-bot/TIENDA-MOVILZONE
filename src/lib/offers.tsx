@@ -1,0 +1,488 @@
+"use client";
+
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { describeStock, products as baseProducts, type Product } from "@/data/products";
+import { useStoreConfig } from "@/config/store-config";
+import { useOrders } from "@/lib/orders";
+import { fetchTallerCatalog, pushTallerProduct } from "@/services/taller-gestio/browser";
+import {
+  categorySignature,
+  mergeTallerCategoriesIntoStore,
+} from "@/services/taller-gestio/categories";
+import {
+  loadProductPlacements,
+  saveProductPlacements,
+  type StoreProductPlacement,
+} from "@/lib/store-product-placements";
+
+/**
+ * Ofertas de transferencia: siguen en este navegador y se aplican sobre el precio del taller.
+ * Catálogo, stock y altas se leen y escriben en TallerGestio.
+ */
+
+export type DiscountKind = "percent" | "fixed";
+
+export type ProductOffer = {
+  active: boolean;
+  kind: DiscountKind;
+  value: number;
+};
+
+export type PriceQuote = {
+  salePrice: number;
+  badge: string | null;
+  onSale: boolean;
+  error: string | null;
+};
+
+export type CatalogProduct = Product & {
+  salePrice: number;
+  badge: string | null;
+  storeHidden?: boolean;
+};
+
+export type NewProductInput = {
+  title: string;
+  price: number;
+  category: string;
+  categoryId: string;
+  subcategoryId: string;
+  brand: string;
+  image: string;
+  stock: number;
+  offer: ProductOffer;
+};
+
+export type ProductPatch = {
+  price?: number;
+  stock?: number;
+  offer?: ProductOffer;
+  image?: string;
+};
+
+type CatalogContextValue = {
+  products: CatalogProduct[];
+  offerOf: (productId: string) => ProductOffer | null;
+  saveOffer: (productId: string, offer: ProductOffer) => void;
+  updateProduct: (productId: string, patch: ProductPatch) => void;
+  addProduct: (input: NewProductInput) => string;
+  placements: Record<string, StoreProductPlacement>;
+  placeProduct: (productId: string, categoryId: string, subcategoryId?: string) => void;
+  clearProductPlacement: (productId: string) => void;
+  toggleProductHidden: (productId: string) => void;
+};
+
+const OFFERS_KEY = "movilzone.offers";
+const EXTRAS_KEY = "movilzone.extra-products";
+const PRICES_KEY = "movilzone.price-overrides";
+const IMAGES_KEY = "movilzone.product-images";
+const HIDDEN_KEY = "movilzone.hidden-products";
+const MAX_PERCENT = 90;
+
+const defaultOffers: Record<string, ProductOffer> = {
+  "2": { active: true, kind: "percent", value: 10 },
+  "5": { active: true, kind: "percent", value: 10 },
+  "8": { active: true, kind: "fixed", value: 1000 },
+};
+
+const CatalogContext = createContext<CatalogContextValue | null>(null);
+
+export function quotePrice(price: number, offer: ProductOffer | null): PriceQuote {
+  const plain = { salePrice: price, badge: null, onSale: false, error: null };
+  if (!offer?.active) return plain;
+  if (!Number.isFinite(price) || price <= 0) return { ...plain, error: "El precio original no es válido." };
+  if (!Number.isFinite(offer.value) || offer.value <= 0) {
+    return { ...plain, error: "Ingresá un descuento mayor a cero." };
+  }
+
+  if (offer.kind === "percent") {
+    if (offer.value > MAX_PERCENT) {
+      return { ...plain, error: `El porcentaje máximo es ${MAX_PERCENT}%.` };
+    }
+    const salePrice = Math.round(price * (1 - offer.value / 100));
+    if (salePrice >= price || salePrice < 1) return { ...plain, error: "El descuento no modifica el precio." };
+    return { salePrice, badge: `-${Math.round(offer.value)}%`, onSale: true, error: null };
+  }
+
+  const amount = Math.round(offer.value);
+  if (amount >= price) return { ...plain, error: "El monto tiene que ser menor al precio original." };
+  const percent = Math.round((amount / price) * 100);
+  if (percent < 1) return { ...plain, error: "El descuento es demasiado chico para mostrarse." };
+  return { salePrice: price - amount, badge: `-${percent}%`, onSale: true, error: null };
+}
+
+function applyOffer(product: Product, offer: ProductOffer | undefined): CatalogProduct {
+  const quote = quotePrice(product.price, offer ?? null);
+  return { ...product, onSale: quote.onSale, salePrice: quote.salePrice, badge: quote.badge };
+}
+
+function sanitizeOffer(value: unknown): ProductOffer | null {
+  if (!value || typeof value !== "object") return null;
+  const offer = value as Partial<ProductOffer>;
+  if (offer.kind !== "percent" && offer.kind !== "fixed") return null;
+  if (typeof offer.value !== "number" || !Number.isFinite(offer.value) || offer.value < 0) return null;
+  return { active: Boolean(offer.active), kind: offer.kind, value: offer.value };
+}
+
+function loadOffers() {
+  const merged: Record<string, ProductOffer> = { ...defaultOffers };
+  const raw = window.localStorage.getItem(OFFERS_KEY);
+  if (!raw) return merged;
+  try {
+    const saved = JSON.parse(raw) as Record<string, unknown>;
+    for (const [id, value] of Object.entries(saved)) {
+      const offer = sanitizeOffer(value);
+      if (offer) merged[id] = offer;
+    }
+  } catch {
+    window.localStorage.removeItem(OFFERS_KEY);
+  }
+  return merged;
+}
+
+function sanitizeExtra(value: unknown): Product | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Partial<Product>;
+  if (!item.id || !item.title || typeof item.price !== "number" || !Number.isFinite(item.price) || item.price < 1) {
+    return null;
+  }
+  if (baseProducts.some((product) => product.id === item.id)) return null;
+  const stock = typeof item.stock === "number" && Number.isFinite(item.stock) ? Math.max(0, Math.floor(item.stock)) : 0;
+  const described = describeStock(stock);
+  return {
+    id: item.id,
+    title: item.title,
+    category: item.category || "Accesorios",
+    categoryId: item.categoryId || "accesorios",
+    subcategoryId: item.subcategoryId || "",
+    brand: item.brand || "Genérico",
+    price: Math.round(item.price),
+    image: item.image || "/categories/todo.jpg",
+    stock,
+    stockLabel: described.stockLabel,
+    inStock: described.inStock,
+    onSale: false,
+    isNew: Boolean(item.isNew),
+  };
+}
+
+function loadPrices() {
+  const raw = window.localStorage.getItem(PRICES_KEY);
+  if (!raw) return {};
+  try {
+    const saved = JSON.parse(raw) as Record<string, unknown>;
+    const prices: Record<string, number> = {};
+    for (const [id, value] of Object.entries(saved)) {
+      if (typeof value === "number" && Number.isFinite(value) && value >= 1) prices[id] = Math.round(value);
+    }
+    return prices;
+  } catch {
+    window.localStorage.removeItem(PRICES_KEY);
+    return {};
+  }
+}
+
+function loadHidden() {
+  const raw = window.localStorage.getItem(HIDDEN_KEY);
+  if (!raw) return {} as Record<string, true>;
+  try {
+    const saved = JSON.parse(raw) as unknown;
+    const hidden: Record<string, true> = {};
+    if (Array.isArray(saved)) {
+      for (const id of saved) {
+        if (typeof id === "string" && id) hidden[id] = true;
+      }
+      return hidden;
+    }
+    if (saved && typeof saved === "object") {
+      for (const [id, value] of Object.entries(saved as Record<string, unknown>)) {
+        if (value) hidden[id] = true;
+      }
+    }
+    return hidden;
+  } catch {
+    window.localStorage.removeItem(HIDDEN_KEY);
+    return {};
+  }
+}
+
+function loadImages() {
+  const raw = window.localStorage.getItem(IMAGES_KEY);
+  if (!raw) return {};
+  try {
+    const saved = JSON.parse(raw) as Record<string, unknown>;
+    const images: Record<string, string> = {};
+    for (const [id, value] of Object.entries(saved)) {
+      if (typeof value === "string" && value.trim()) images[id] = value;
+    }
+    return images;
+  } catch {
+    window.localStorage.removeItem(IMAGES_KEY);
+    return {};
+  }
+}
+
+function loadExtras() {
+  const raw = window.localStorage.getItem(EXTRAS_KEY);
+  if (!raw) return [];
+  try {
+    const saved = JSON.parse(raw) as unknown[];
+    if (!Array.isArray(saved)) return [];
+    return saved.flatMap((item) => {
+      const product = sanitizeExtra(item);
+      return product ? [product] : [];
+    });
+  } catch {
+    window.localStorage.removeItem(EXTRAS_KEY);
+    return [];
+  }
+}
+
+export function CatalogProvider({
+  children,
+  initialRemote = null,
+}: {
+  children: ReactNode;
+  initialRemote?: Product[] | null;
+}) {
+  const { config, updateConfig } = useStoreConfig();
+  const { stock, setProductStock } = useOrders();
+  const [offers, setOffers] = useState<Record<string, ProductOffer>>(defaultOffers);
+  const [extras, setExtras] = useState<Product[]>([]);
+  const [prices, setPrices] = useState<Record<string, number>>({});
+  const [remote, setRemote] = useState<Product[] | null>(initialRemote);
+  const [ready, setReady] = useState(false);
+  const [placements, setPlacements] = useState<Record<string, StoreProductPlacement>>({});
+  const [images, setImages] = useState<Record<string, string>>({});
+  const [hidden, setHidden] = useState<Record<string, true>>({});
+
+  useEffect(() => {
+    setOffers(loadOffers());
+    setExtras(loadExtras());
+    setPrices(loadPrices());
+    setPlacements(loadProductPlacements());
+    setImages(loadImages());
+    setHidden(loadHidden());
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    window.localStorage.setItem(OFFERS_KEY, JSON.stringify(offers));
+    window.localStorage.setItem(EXTRAS_KEY, JSON.stringify(extras));
+    window.localStorage.setItem(PRICES_KEY, JSON.stringify(prices));
+    saveProductPlacements(placements);
+    try {
+      window.localStorage.setItem(IMAGES_KEY, JSON.stringify(images));
+    } catch {
+      /* data URLs pueden llenar la cuota; se mantiene en memoria */
+    }
+    window.localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
+  }, [extras, offers, prices, placements, images, hidden, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    for (const product of extras) {
+      if (!(product.id in stock)) setProductStock(product.id, product.stock);
+    }
+  }, [extras, ready, setProductStock, stock]);
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancel = false;
+
+    async function pull() {
+      let products: Product[] | null = null;
+      try {
+        products = await fetchTallerCatalog();
+      } catch {
+        return;
+      }
+      if (cancel || !products) return;
+      setRemote(products);
+      const titles = new Set(products.map((product) => product.title));
+      setExtras((current) => {
+        const dropped = current.filter((item) => titles.has(item.title));
+        if (dropped.length) {
+          setOffers((saved) => {
+            const next = { ...saved };
+            for (const item of dropped) {
+              const match = products.find((product) => product.title === item.title);
+              if (match && next[item.id]) next[match.id] = next[item.id];
+            }
+            return next;
+          });
+        }
+        return current.filter((item) => !titles.has(item.title));
+      });
+      setPrices((current) => {
+        const next = { ...current };
+        for (const product of products) next[product.id] = product.price;
+        return next;
+      });
+      for (const product of products) setProductStock(product.id, product.stock);
+    }
+
+    void pull();
+    const timer = window.setInterval(() => void pull(), 4000);
+    return () => {
+      cancel = true;
+      window.clearInterval(timer);
+    };
+  }, [ready]);
+
+  useEffect(() => {
+    if (!remote?.length) return;
+    const merged = mergeTallerCategoriesIntoStore(
+      config.categories,
+      remote.map((product) => product.category),
+    );
+    if (categorySignature(merged) === categorySignature(config.categories)) return;
+    updateConfig({ categories: merged });
+  }, [remote, config.categories, updateConfig]);
+
+  const products = useMemo(
+    () =>
+      [...(remote ?? baseProducts), ...extras].map((product) => ({
+        ...applyOffer(
+          {
+            ...product,
+            price: prices[product.id] ?? product.price,
+            image: images[product.id] ?? product.image,
+          },
+          offers[product.id],
+        ),
+        storeHidden: Boolean(hidden[product.id]),
+      })),
+    [extras, hidden, images, offers, prices, remote],
+  );
+
+  function saveOffer(productId: string, offer: ProductOffer) {
+    setOffers((current) => ({ ...current, [productId]: offer }));
+  }
+
+  function updateProduct(productId: string, patch: ProductPatch) {
+    if (patch.price != null && Number.isFinite(patch.price) && patch.price >= 1) {
+      const price = Math.round(patch.price);
+      setPrices((current) => ({ ...current, [productId]: price }));
+      setExtras((current) => current.map((item) => (item.id === productId ? { ...item, price } : item)));
+    }
+    if (patch.stock != null && Number.isFinite(patch.stock)) {
+      const quantity = Math.max(0, Math.floor(patch.stock));
+      const described = describeStock(quantity);
+      setProductStock(productId, quantity);
+      setExtras((current) =>
+        current.map((item) => (item.id === productId ? { ...item, stock: quantity, ...described } : item)),
+      );
+    }
+    if (patch.offer) saveOffer(productId, patch.offer);
+    if (patch.image && patch.image.trim()) {
+      const image = patch.image.trim();
+      setImages((current) => ({ ...current, [productId]: image }));
+      setExtras((current) => current.map((item) => (item.id === productId ? { ...item, image } : item)));
+    }
+    const current = products.find((item) => item.id === productId);
+    if (!current) return;
+    const priceChanged = patch.price != null;
+    const stockChanged = patch.stock != null;
+    const offerChanged = Boolean(patch.offer);
+    if (!priceChanged && !stockChanged && !offerChanged) return;
+    const originalImage =
+      (remote ?? []).find((item) => item.id === productId)?.image ??
+      extras.find((item) => item.id === productId)?.image ??
+      current.image;
+    void pushTallerProduct({
+      id: productId,
+      title: current.title,
+      price: patch.price ?? current.price,
+      stock: patch.stock ?? stock[productId] ?? current.stock,
+      category: current.category,
+      image: originalImage,
+    });
+  }
+
+  function addProduct(input: NewProductInput) {
+    const id = `extra-${Date.now().toString(36)}`;
+    const described = describeStock(input.stock);
+    const product: Product = {
+      id,
+      title: input.title.trim(),
+      category: input.category,
+      categoryId: input.categoryId,
+      subcategoryId: input.subcategoryId,
+      brand: input.brand,
+      price: Math.round(input.price),
+      image: input.image,
+      stock: input.stock,
+      stockLabel: described.stockLabel,
+      inStock: described.inStock,
+      onSale: false,
+      isNew: false,
+    };
+    setExtras((current) => [...current, product]);
+    setOffers((current) => ({ ...current, [id]: input.offer }));
+    setProductStock(id, input.stock);
+    void pushTallerProduct({
+      title: product.title,
+      price: product.price,
+      stock: product.stock,
+      category: product.category,
+      image: product.image,
+    });
+    return id;
+  }
+
+  function placeProduct(productId: string, categoryId: string, subcategoryId?: string) {
+    setPlacements((current) => ({
+      ...current,
+      [productId]: {
+        categoryId,
+        subcategoryId: subcategoryId || undefined,
+      },
+    }));
+  }
+
+  function toggleProductHidden(productId: string) {
+    setHidden((current) => {
+      if (current[productId]) {
+        const next = { ...current };
+        delete next[productId];
+        return next;
+      }
+      return { ...current, [productId]: true };
+    });
+  }
+
+  function clearProductPlacement(productId: string) {
+    setPlacements((current) => {
+      if (!(productId in current)) return current;
+      const next = { ...current };
+      delete next[productId];
+      return next;
+    });
+  }
+
+  return (
+    <CatalogContext.Provider
+      value={{
+        products,
+        offerOf: (productId) => offers[productId] ?? null,
+        saveOffer,
+        updateProduct,
+        addProduct,
+        placements,
+        placeProduct,
+        clearProductPlacement,
+        toggleProductHidden,
+      }}
+    >
+      {children}
+    </CatalogContext.Provider>
+  );
+}
+
+export function useCatalog() {
+  const context = useContext(CatalogContext);
+  if (!context) throw new Error("useCatalog debe usarse dentro de CatalogProvider");
+  return context;
+}
