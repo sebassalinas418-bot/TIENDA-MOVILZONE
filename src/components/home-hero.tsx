@@ -449,7 +449,7 @@ export function BenefitRow() {
 
   return (
     <>
-      <section className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-3 px-4 pt-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
+      <section className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-2 px-3 pt-3 sm:grid-cols-2 sm:gap-3 sm:px-6 sm:pt-4 lg:grid-cols-4">
         {benefits.map((benefit) => {
           const isStatus = benefit.icon === "clock";
           const title = isStatus ? (known ? (open ? "Abierto ahora" : "Cerrado") : "Horario") : benefit.title;

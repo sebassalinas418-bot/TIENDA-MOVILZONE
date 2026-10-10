@@ -30,7 +30,7 @@ export function ProductCard({
     <article
       draggable={draggable}
       onDragStart={onDragStart}
-      className={`relative flex h-full flex-col rounded-2xl border bg-white p-3 shadow-sm transition-shadow duration-300 hover:shadow-md ${
+      className={`relative flex h-full min-w-0 flex-col rounded-xl border bg-white p-2 shadow-sm transition-shadow duration-300 hover:shadow-md sm:rounded-2xl sm:p-3 ${
         hidden ? "border-dashed border-neutral-300" : "border-gray-100"
       } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
     >
@@ -59,13 +59,13 @@ export function ProductCard({
         aria-pressed={favorite}
         aria-label={favorite ? "Quitar de favoritos" : "Marcar como favorito"}
         onClick={() => setFavorite((current) => !current)}
-        className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-400 transition-colors hover:text-sky-500"
+        className="absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-gray-400 transition-colors hover:text-sky-500 sm:top-3 sm:right-3 sm:h-8 sm:w-8"
       >
         <HeartIcon filled={favorite} />
       </button>
 
       <div className={`relative ${hidden ? "opacity-45" : ""}`}>
-        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-gray-50">
+        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-50 sm:rounded-xl">
           <img
             src={product.image}
             alt=""
@@ -97,22 +97,22 @@ export function ProductCard({
         ) : null}
       </div>
 
-      <p className="mt-3 pr-12 text-sm font-semibold text-neutral-800">{product.stockLabel}</p>
-      <h3 className={`mt-1 line-clamp-2 pr-2 text-base font-semibold text-neutral-950 ${hidden ? "line-through decoration-neutral-400" : ""}`}>
+      <p className="mt-2 pr-8 text-[11px] font-semibold text-neutral-800 sm:mt-3 sm:pr-12 sm:text-sm">{product.stockLabel}</p>
+      <h3 className={`mt-0.5 line-clamp-2 pr-2 text-[13px] leading-snug font-semibold text-neutral-950 sm:mt-1 sm:text-base ${hidden ? "line-through decoration-neutral-400" : ""}`}>
         {product.title}
       </h3>
-      <div className="mt-2 max-w-[calc(100%-3rem)]">
+      <div className="mt-1.5 max-w-[calc(100%-2.25rem)] sm:mt-2 sm:max-w-[calc(100%-3rem)]">
         <div className="flex items-center gap-2">
           {onEdit ? (
             <button
               type="button"
               onClick={onEdit}
-              className={`text-left font-extrabold tracking-tight text-neutral-950 underline-offset-2 hover:text-sky-700 hover:underline ${product.onSale ? "text-xl" : "text-lg"}`}
+              className={`text-left font-extrabold tracking-tight text-neutral-950 underline-offset-2 hover:text-sky-700 hover:underline ${product.onSale ? "text-base sm:text-xl" : "text-sm sm:text-lg"}`}
             >
               {formatPrice(product.salePrice)}
             </button>
           ) : (
-            <p className={`font-extrabold tracking-tight text-neutral-950 ${product.onSale ? "text-xl" : "text-lg"}`}>
+            <p className={`font-extrabold tracking-tight text-neutral-950 ${product.onSale ? "text-base sm:text-xl" : "text-sm sm:text-lg"}`}>
               {formatPrice(product.salePrice)}
             </p>
           )}
@@ -128,11 +128,11 @@ export function ProductCard({
           ) : null}
         </div>
         {product.onSale ? (
-          <p className="mt-0.5 text-sm font-semibold text-rose-800 line-through decoration-rose-800">
+          <p className="mt-0.5 text-xs font-semibold text-rose-800 line-through decoration-rose-800 sm:text-sm">
             {formatPrice(product.price)}
           </p>
         ) : null}
-        <p className="mt-1 text-sm font-semibold leading-snug text-neutral-800">Precio pagando por transferencia</p>
+        <p className="mt-1 hidden text-sm font-semibold leading-snug text-neutral-800 sm:block">Precio pagando por transferencia</p>
       </div>
 
       <button
@@ -140,7 +140,7 @@ export function ProductCard({
         aria-label={product.inStock ? `Agregar ${product.title} al carrito` : `${product.title} agotado`}
         disabled={!product.inStock}
         onClick={onAddToCart}
-        className="absolute right-4 bottom-4 flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-white shadow-sm transition-colors duration-200 hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:bg-gray-300"
+        className="absolute right-2 bottom-2 flex h-8 w-8 items-center justify-center rounded-full bg-sky-500 text-white shadow-sm transition-colors duration-200 hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:bg-gray-300 sm:right-4 sm:bottom-4 sm:h-10 sm:w-10"
       >
         <CartIcon />
       </button>

@@ -811,9 +811,9 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
 
   const catalog = (
     <>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-6 sm:py-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 sm:text-3xl">
             {vista === "ofertas" ? "Ofertas" : "Nuestra tienda"}
           </h1>
           {admin ? (
@@ -827,7 +827,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
           ) : null}
         </div>
 
-        <div className={`mt-6 ${admin ? "grid gap-8 lg:grid-cols-[250px_minmax(0,1fr)]" : "lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8"}`}>
+        <div className={`mt-3 sm:mt-6 ${admin ? "grid gap-8 lg:grid-cols-[250px_minmax(0,1fr)]" : "lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8"}`}>
           <aside className={admin ? "block" : "hidden lg:block"}>{filters}</aside>
 
           <div>
@@ -836,18 +836,18 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
               <button
                 type="button"
                 onClick={() => setFiltersOpen((open) => !open)}
-                className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-900 lg:hidden"
+                className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-900 sm:px-4 sm:py-2 lg:hidden"
               >
                 {filtersOpen ? "Ocultar filtros" : "Filtros"}
               </button>
               )}
               {showSubcategoryGrid ? null : (
-              <label className="ml-auto flex items-center gap-2 text-sm font-semibold text-neutral-900">
+              <label className="ml-auto flex items-center gap-2 text-xs font-semibold text-neutral-900 sm:text-sm">
                 <span>Ordenar</span>
                 <select
                   value={sortKey}
                   onChange={(event) => setSortKey(event.target.value as SortKey)}
-                  className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-sky-500"
+                  className="h-8 rounded-xl border border-gray-200 bg-white px-2 text-xs text-gray-900 outline-none focus:border-sky-500 sm:h-10 sm:px-3 sm:text-sm"
                 >
                   <option value="relevant">Más relevantes</option>
                   <option value="price-desc">Mayor precio</option>
@@ -886,7 +886,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                     ? "Elegí una subcategoría o soltá el producto acá / abajo para dejarlo en esta categoría."
                     : "Elegí una subcategoría"}
                 </p>
-                <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
+                <ul className="mt-3 grid grid-cols-2 gap-2 sm:mt-5 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
                   {activeCategory.children.map((child) => {
                     const cover = subcategoryCover(
                       activeCategory.image,
@@ -987,7 +987,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                 <span className="font-medium text-gray-900">{activeSubcategory?.name}</span>
               </div>
             ) : null}
-            <p className="mt-4 text-base font-semibold text-neutral-800">
+            <p className="mt-3 text-sm font-semibold text-neutral-800 sm:mt-4 sm:text-base">
               {showSubcategoryGrid && activeCategory
                 ? `${visibleProducts.length === 1 ? "1 producto" : `${visibleProducts.length} productos`} en ${activeCategory.name}`
                 : visibleProducts.length === 1
@@ -1029,9 +1029,9 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
             ) : null}
 
             {visibleProducts.length > 0 ? (
-              <ul className="mt-5 grid grid-cols-2 gap-4 xl:grid-cols-3">
+              <ul className="mt-3 grid grid-cols-2 gap-2 sm:mt-5 sm:gap-4 xl:grid-cols-3">
                 {visibleProducts.map((product) => (
-                  <li key={product.id}>
+                  <li key={product.id} className="min-w-0">
                     <ProductCard
                       product={product}
                       onAddToCart={() => handleAddToCart(product)}

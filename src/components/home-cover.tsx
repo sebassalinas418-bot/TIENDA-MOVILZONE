@@ -83,7 +83,7 @@ export function HomeSlider() {
       aria-label="Portada de la tienda"
     >
       <div
-        className="relative mx-auto w-full max-w-6xl px-4 pt-4 sm:px-6"
+        className="relative mx-auto w-full max-w-6xl px-3 pt-2 sm:px-6 sm:pt-4"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)}
@@ -145,11 +145,11 @@ export function HomeSlider() {
 
 function OffersPlate({ product }: { product: CatalogProduct | null }) {
   return (
-    <div className="grid min-h-[300px] text-gray-900 lg:grid-cols-[1.15fr_0.85fr]">
-      <div className="px-6 py-8 pb-12 sm:px-10 sm:py-12">
+    <div className="grid min-h-[220px] text-gray-900 sm:min-h-[300px] lg:grid-cols-[1.15fr_0.85fr]">
+      <div className="px-4 py-5 pb-10 sm:px-10 sm:py-12">
         <p className="text-xs font-bold tracking-[0.18em] text-sky-600 uppercase">Esta semana</p>
-        <h1 className="mt-3 max-w-md text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl">Ofertas de la semana</h1>
-        <p className="mt-4 max-w-md text-base font-medium leading-7 text-neutral-800">
+        <h1 className="mt-2 max-w-md text-2xl font-bold tracking-tight text-neutral-950 sm:mt-3 sm:text-5xl">Ofertas de la semana</h1>
+        <p className="mt-3 max-w-md text-sm font-medium leading-6 text-neutral-800 sm:mt-4 sm:text-base sm:leading-7">
           Un precio especial en accesorios del local. El valor tachado es el anterior y el destacado es pagando por transferencia.
         </p>
         <Link
@@ -175,16 +175,16 @@ function RepairPlate() {
 
   return (
     <div className="px-1 pt-1 pb-12 sm:px-2">
-      <div className="relative min-h-[320px] overflow-hidden rounded-3xl">
+      <div className="relative min-h-[220px] overflow-hidden rounded-2xl sm:min-h-[320px] sm:rounded-3xl">
         <img
           src="/banners/taller-reparacion.jpg"
           alt=""
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-black/88 via-black/75 to-black/45" />
-        <div className="relative z-10 flex min-h-[320px] flex-col justify-center px-6 py-10 sm:px-10 lg:max-w-2xl">
+        <div className="relative z-10 flex min-h-[220px] flex-col justify-center px-4 py-6 sm:min-h-[320px] sm:px-10 sm:py-10 lg:max-w-2xl">
           <p className="text-sm font-bold tracking-[0.16em] text-sky-300 uppercase">Taller del local</p>
-          <h2 className="mt-3 max-w-xl text-3xl font-bold tracking-tight text-white sm:text-5xl">
+          <h2 className="mt-2 max-w-xl text-2xl font-bold tracking-tight text-white sm:mt-3 sm:text-5xl">
             Servicio técnico especializado
           </h2>
           <p className="mt-4 max-w-lg text-lg font-medium leading-8 text-white">
@@ -259,7 +259,7 @@ function LocationPlate() {
 
 function PromoPlate({ product }: { product: CatalogProduct | null }) {
   return (
-    <div className="grid min-h-[300px] text-gray-900 lg:grid-cols-[1.15fr_0.85fr]">
+    <div className="grid min-h-[220px] text-gray-900 sm:min-h-[300px] lg:grid-cols-[1.15fr_0.85fr]">
       <div className="px-6 py-8 pb-12 sm:px-10 sm:py-12">
         <p className="text-xs font-bold tracking-[0.18em] text-sky-600 uppercase">Promociones</p>
         <h2 className="mt-3 max-w-md text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl">Promociones especiales</h2>
@@ -314,19 +314,19 @@ export function FeaturedProducts({ onAddToCart }: { onAddToCart: (product: Catal
   const featured = pickFeatured(live);
 
   return (
-    <section id="recien-llegados" className="mx-auto w-full max-w-6xl px-4 pt-12 sm:px-6">
+    <section id="recien-llegados" className="mx-auto w-full max-w-6xl px-3 pt-6 sm:px-6 sm:pt-12">
       <div className="flex items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold tracking-[0.16em] text-sky-600 uppercase">Destacados</p>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight text-gray-900">Recién llegados</h2>
+          <h2 className="mt-1 text-xl font-bold tracking-tight text-gray-900 sm:text-2xl">Recién llegados</h2>
         </div>
         <Link href="/tienda" className="text-sm font-medium text-sky-500 hover:text-sky-600">
           Ver todo
         </Link>
       </div>
-      <ul className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <ul className="mt-3 grid grid-cols-2 gap-2 sm:mt-5 sm:gap-4 lg:grid-cols-4">
         {featured.map((product) => (
-          <li key={product.id}>
+          <li key={product.id} className="min-w-0">
             <ProductCard product={product} onAddToCart={() => onAddToCart(product)} />
           </li>
         ))}

@@ -51,12 +51,12 @@ export function SiteHeader({
     <header id="inicio" className="sticky top-0 z-40 w-full">
       <TopTicker />
       <div className="border-b border-white/10 bg-black">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:gap-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 sm:px-6 sm:py-3 lg:flex-nowrap lg:gap-6">
         <Link href="/" className="shrink-0" aria-label="Movil zone, ir al inicio">
-          <img src="/brand/logo-lockup.png" alt="" className="h-16 w-auto sm:h-[4.5rem]" />
+          <img src="/brand/logo-lockup.png" alt="" className="h-9 w-auto sm:h-14 lg:h-[4.5rem]" />
         </Link>
 
-        <label className="relative block min-w-0 flex-1">
+        <label className="relative order-3 min-w-0 w-full flex-1 basis-full lg:order-none lg:basis-0">
           <span className="sr-only">Buscar productos</span>
           <input
             type="search"
@@ -66,25 +66,25 @@ export function SiteHeader({
               if (event.key === "Enter" && onSearch) onSearch(query);
             }}
             placeholder="Buscar productos, marcas..."
-            className="h-11 w-full rounded-full border border-white/15 bg-white/5 pr-12 pl-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-sky-400 focus:bg-white/10"
+            className="h-9 w-full rounded-full border border-white/15 bg-white/5 pr-11 pl-3 text-sm text-white outline-none placeholder:text-white/40 focus:border-sky-400 focus:bg-white/10 sm:h-11 sm:pr-12 sm:pl-4"
           />
           {onSearch ? (
             <button
               type="button"
               aria-label="Buscar"
               onClick={() => onSearch(query)}
-              className="absolute top-1/2 right-1.5 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-sky-500 text-white"
+              className="absolute top-1/2 right-1 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-sky-500 text-white sm:right-1.5 sm:h-8 sm:w-8"
             >
               <SearchIcon />
             </button>
           ) : (
-            <span className="absolute top-1/2 right-1.5 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-sky-500 text-white">
+            <span className="absolute top-1/2 right-1 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-sky-500 text-white sm:right-1.5 sm:h-8 sm:w-8">
               <SearchIcon />
             </span>
           )}
         </label>
 
-        <div className="flex items-center gap-1 self-end lg:self-auto">
+        <div className="ml-auto flex items-center gap-0.5 lg:ml-0 lg:gap-1">
           {isAdmin ? (
             <Link
               href="/admin"
@@ -98,10 +98,10 @@ export function SiteHeader({
           <button
             type="button"
             onClick={onCart}
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
+            className="inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-sm font-medium text-white hover:bg-white/10 sm:px-3 sm:py-2"
           >
             <CartIcon />
-            Carrito
+            <span className="hidden sm:inline">Carrito</span>
             {count > 0 ? (
               <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-sky-500 px-1.5 text-[11px] font-bold text-white">
                 {count}
@@ -112,7 +112,7 @@ export function SiteHeader({
       </div>
 
       <nav className="border-t border-white/10" aria-label="Secciones">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-2 sm:px-6">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-1.5 sm:gap-4 sm:px-6 sm:py-2">
           <SectionNav />
           <div className="flex shrink-0 items-center gap-1">
             <a
@@ -163,7 +163,7 @@ function TopTicker() {
     <div className="overflow-hidden bg-sky-500 text-white" role="status" aria-live="polite">
       <p
         key={index}
-        className="px-4 py-2 text-center text-sm font-semibold tracking-wide motion-safe:animate-[ticker-in_450ms_ease-out]"
+        className="px-3 py-1.5 text-center text-[11px] font-semibold tracking-wide motion-safe:animate-[ticker-in_450ms_ease-out] sm:px-4 sm:py-2 sm:text-sm"
       >
         {tickerMessages[index]}
       </p>
@@ -194,7 +194,7 @@ function SectionLinks({ pathname, vista }: { pathname: string; vista: string | n
           <Link
             key={link.label}
             href={link.href}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`shrink-0 rounded-full px-2.5 py-1 text-[13px] font-medium transition-colors sm:px-3 sm:py-1.5 sm:text-sm ${
               active ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white"
             }`}
           >
