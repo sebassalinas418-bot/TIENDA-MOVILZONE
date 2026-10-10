@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type DragEvent } from "react";
+import { useState, type DragEvent, type MouseEvent } from "react";
 import { formatPrice } from "@/data/products";
 import type { CatalogProduct } from "@/lib/offers";
+import { ProductPreviewModal } from "@/components/product-preview-modal";
 import { isStoreSoldOut, SOLD_OUT_LABEL, soldOutStrikeClass } from "@/lib/store-sold-out/presentation";
 
 type ProductCardProps = {
@@ -25,20 +26,28 @@ export function ProductCard({
   onDragStart,
 }: ProductCardProps) {
   const [favorite, setFavorite] = useState(false);
+  const [preview, setPreview] = useState(false);
   const hidden = Boolean(product.storeHidden);
   const soldOut = isStoreSoldOut(product);
+
+  function openPreview(event: MouseEvent<HTMLElement>) {
+    if ((event.target as HTMLElement).closest("[data-card-control]")) return;
+    setPreview(true);
+  }
 
   return (
     <article
       draggable={draggable}
       onDragStart={onDragStart}
-      className={`relative flex h-full min-w-0 flex-col rounded-xl border bg-white p-2 shadow-sm transition-shadow duration-300 hover:shadow-md sm:rounded-2xl sm:p-3 ${
+      onClick={openPreview}
+      className={`relative flex h-full min-w-0 cursor-pointer flex-col rounded-lg border bg-white p-1.5 shadow-sm transition-shadow duration-300 hover:shadow-md sm:rounded-2xl sm:p-3 ${
         hidden ? "border-dashed border-neutral-300" : "border-gray-100"
       } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
     >
       {onToggleHidden ? (
         <button
           type="button"
+          data-card-control
           aria-pressed={hidden}
           aria-label={hidden ? `Mostrar ${product.title} en la tienda` : `Ocultar ${product.title} de la tienda`}
           title={hidden ? "Oculto para clientes. Clic para mostrar." : "Visible para clientes. Clic para ocultar."}
@@ -58,16 +67,17 @@ export function ProductCard({
       ) : null}
       <button
         type="button"
+        data-card-control
         aria-pressed={favorite}
         aria-label={favorite ? "Quitar de favoritos" : "Marcar como favorito"}
         onClick={() => setFavorite((current) => !current)}
-        className="absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-gray-400 transition-colors hover:text-sky-500 sm:top-3 sm:right-3 sm:h-8 sm:w-8"
+        className="absolute top-1.5 right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-gray-400 transition-colors hover:text-sky-500 sm:top-3 sm:right-3 sm:h-8 sm:w-8"
       >
         <HeartIcon filled={favorite} />
       </button>
 
       <div className={`relative ${hidden ? "opacity-45" : ""}`}>
-        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-gray-50 sm:rounded-xl">
+        <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md bg-gray-50 sm:aspect-square sm:rounded-xl">
           <img
             src={product.image}
             alt=""
@@ -94,6 +104,7 @@ export function ProductCard({
         {onEditImage ? (
           <button
             type="button"
+            data-card-control
             onClick={onEditImage}
             onDragStart={(event) => {
               event.preventDefault();
@@ -106,24 +117,25 @@ export function ProductCard({
         ) : null}
       </div>
 
-      <p className="mt-2 pr-8 text-[11px] font-semibold text-neutral-800 sm:mt-3 sm:pr-12 sm:text-sm">{product.stockLabel}</p>
+      <p className="mt-1 pr-7 text-[10px] font-semibold text-neutral-800 sm:mt-3 sm:pr-12 sm:text-sm">{product.stockLabel}</p>
       <h3
         className={soldOutStrikeClass(
           soldOut || hidden,
-          "mt-0.5 line-clamp-2 pr-2 text-[13px] leading-snug font-semibold text-neutral-950 sm:mt-1 sm:text-base",
+          "mt-0.5 line-clamp-2 pr-1 text-[12px] leading-snug font-semibold text-neutral-950 sm:mt-1 sm:pr-2 sm:text-base",
         )}
       >
         {product.title}
       </h3>
-      <div className="mt-1.5 max-w-[calc(100%-2.25rem)] sm:mt-2 sm:max-w-[calc(100%-3rem)]">
+      <div className="mt-1 max-w-[calc(100%-2rem)] sm:mt-2 sm:max-w-[calc(100%-3rem)]">
         <div className="flex items-center gap-2">
           {onEdit ? (
             <button
               type="button"
+              data-card-control
               onClick={onEdit}
               className={soldOutStrikeClass(
                 soldOut,
-                `text-left font-extrabold tracking-tight text-neutral-950 underline-offset-2 hover:text-sky-700 hover:underline ${product.onSale ? "text-base sm:text-xl" : "text-sm sm:text-lg"}`,
+                `text-left font-extrabold tracking-tight text-neutral-950 underline-offset-2 hover:text-sky-700 hover:underline ${product.onSale ? "text-sm sm:text-xl" : "text-xs sm:text-lg"}`,
               )}
             >
               {formatPrice(product.salePrice)}
@@ -132,7 +144,7 @@ export function ProductCard({
             <p
               className={soldOutStrikeClass(
                 soldOut,
-                `font-extrabold tracking-tight text-neutral-950 ${product.onSale ? "text-base sm:text-xl" : "text-sm sm:text-lg"}`,
+                `font-extrabold tracking-tight text-neutral-950 ${product.onSale ? "text-sm sm:text-xl" : "text-xs sm:text-lg"}`,
               )}
             >
               {formatPrice(product.salePrice)}
@@ -141,6 +153,7 @@ export function ProductCard({
           {onEdit ? (
             <button
               type="button"
+              data-card-control
               aria-label={`Editar ${product.title}`}
               onClick={onEdit}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-sky-200 bg-white text-sky-600 transition-colors hover:bg-sky-500 hover:text-white"
@@ -159,6 +172,7 @@ export function ProductCard({
 
       <button
         type="button"
+        data-card-control
         aria-label={
           product.pendingHold
             ? `${product.title} reservado / pendiente de pago`
@@ -168,10 +182,17 @@ export function ProductCard({
         }
         disabled={!product.inStock || Boolean(product.pendingHold)}
         onClick={onAddToCart}
-        className="absolute right-2 bottom-2 flex h-8 w-8 items-center justify-center rounded-full bg-sky-500 text-white shadow-sm transition-colors duration-200 hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:bg-gray-300 sm:right-4 sm:bottom-4 sm:h-10 sm:w-10"
+        className="absolute right-1.5 bottom-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-sky-500 text-white shadow-sm transition-colors duration-200 hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:bg-gray-300 sm:right-4 sm:bottom-4 sm:h-10 sm:w-10"
       >
         <CartIcon />
       </button>
+      {preview ? (
+        <ProductPreviewModal
+          product={product}
+          onClose={() => setPreview(false)}
+          onAddToCart={onAddToCart}
+        />
+      ) : null}
     </article>
   );
 }

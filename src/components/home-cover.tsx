@@ -9,6 +9,7 @@ import { useCatalog, type CatalogProduct } from "@/lib/offers";
 import { useOrders } from "@/lib/orders";
 import { ProductCard } from "@/components/product-card";
 import { homeBannerMobile } from "@/lib/store-home-banner/mobile";
+import { storeFeaturedGridClass } from "@/lib/store-product-grid/mobile";
 
 const categoryRank: Record<string, number> = {
   cargadores: 0,
@@ -330,7 +331,7 @@ export function FeaturedProducts({ onAddToCart }: { onAddToCart: (product: Catal
           Ver todo
         </Link>
       </div>
-      <ul className="mt-3 grid grid-cols-2 gap-2 sm:mt-5 sm:gap-4 lg:grid-cols-4">
+      <ul className={storeFeaturedGridClass}>
         {featured.map((product) => (
           <li key={product.id} className="min-w-0">
             <ProductCard product={product} onAddToCart={() => onAddToCart(product)} />

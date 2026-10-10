@@ -11,6 +11,7 @@ import { SiteFooter } from "@/components/store-sections";
 import { useStoreConfig } from "@/config/store-config";
 import { brands } from "@/data/products";
 import { overlayCatalogStock } from "@/lib/web-pending-stock/availability";
+import { storeProductGridClass } from "@/lib/store-product-grid/mobile";
 import { isStoreSoldOut } from "@/lib/store-sold-out/presentation";
 import { useCatalog, type CatalogProduct } from "@/lib/offers";
 import { storeVisibleCategory } from "@/lib/store-product-placements";
@@ -870,7 +871,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
 
   const catalog = (
     <>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-6 sm:py-8">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-2 py-3 sm:px-6 sm:py-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <h1 className="text-xl font-bold tracking-tight text-gray-900 sm:text-3xl">
             {onlyOffers ? "Ofertas" : "Nuestra tienda"}
@@ -1094,7 +1095,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
             ) : null}
 
             {visibleProducts.length > 0 ? (
-              <ul className="mt-3 grid grid-cols-2 gap-2 sm:mt-5 sm:gap-4 xl:grid-cols-3">
+              <ul className={storeProductGridClass}>
                 {visibleProducts.map((product) => (
                   <li key={product.id} className="min-w-0">
                     <ProductCard
