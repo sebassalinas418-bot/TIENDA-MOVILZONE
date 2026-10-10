@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { formatPublicHours, useStoreConfig } from "@/config/store-config";
+import { useStoreConfig } from "@/config/store-config";
+import { formatFooterHours } from "@/lib/store-footer-hours/format";
 import { useAdminAccess } from "@/lib/admin-access";
 
 type CategoryBoardProps = {
@@ -77,7 +78,7 @@ const benefits = [
 export function SiteFooter() {
   const { config } = useStoreConfig();
   const { isAdmin } = useAdminAccess();
-  const hours = formatPublicHours(config.openingHours);
+  const hours = formatFooterHours(config.openingHours);
 
   return (
     <footer className="mt-16">
@@ -156,7 +157,7 @@ export function SiteFooter() {
                 <ClockIcon />
                 <ul className="space-y-2">
                   {hours.map((line) => (
-                    <HourLine key={line} line={line} />
+                    <HourLine key={line.label} label={line.label} shifts={line.shifts} />
                   ))}
                 </ul>
               </li>
@@ -172,15 +173,10 @@ export function SiteFooter() {
   );
 }
 
-function HourLine({ line }: { line: string }) {
-  const split = line.indexOf(": ");
-  const day = split === -1 ? line : line.slice(0, split);
-  const rest = split === -1 ? "" : line.slice(split + 2);
-  const shifts = rest.split(" y ").filter(Boolean);
-
+function HourLine({ label, shifts }: { label: string; shifts: string[] }) {
   return (
     <li>
-      <span className="font-medium text-white/90">{day}</span>
+      <span className="font-medium text-white/90">{label}</span>
       {shifts.map((shift) => (
         <span key={shift} className="block">
           {shift}
