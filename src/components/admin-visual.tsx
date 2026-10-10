@@ -72,7 +72,7 @@ export function ProductEditModal({
           error={imageError}
           onChange={setImage}
           onError={setImageError}
-          searchQuery={product.title}
+          autoIsolate
         />
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
@@ -369,16 +369,15 @@ function ImagePicker({
   error,
   onChange,
   onError,
-  searchQuery,
+  autoIsolate = false,
 }: {
   value: string;
   error: string;
   onChange: (value: string) => void;
   onError: (value: string) => void;
-  searchQuery?: string;
+  autoIsolate?: boolean;
 }) {
   const [reading, setReading] = useState(false);
-  const autoIsolate = Boolean(searchQuery);
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -450,26 +449,9 @@ function ImagePicker({
           }}
         />
       </label>
-      {searchQuery ? (
-        <AdminImageTools
-          value={value}
-          searchQuery={searchQuery}
-          onChange={onChange}
-          onError={onError}
-        />
+      {autoIsolate ? (
+        <AdminImageTools value={value} onChange={onChange} onError={onError} />
       ) : null}
-      <label className="mt-3 block text-sm">
-        <span className="font-medium text-gray-700">O pegá la dirección de la foto</span>
-        <input
-          value={value.startsWith("data:") ? "" : value}
-          onChange={(event) => {
-            onChange(event.target.value);
-            onError("");
-          }}
-          placeholder="https://... o /categories/fundas.jpg"
-          className="mt-1 h-10 w-full rounded-xl border border-gray-200 bg-white px-3 outline-none focus:border-sky-500"
-        />
-      </label>
       {value.startsWith("data:") ? <p className="mt-2 text-xs text-gray-500">Imagen lista para guardar. Solo se ve en la tienda web.</p> : null}
       {error ? <p className="mt-2 text-sm font-medium text-rose-700">{error}</p> : null}
     </div>
