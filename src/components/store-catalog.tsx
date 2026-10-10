@@ -65,8 +65,52 @@ type CategoryFilter =
   | { kind: "category"; categoryId: string }
   | { kind: "sub"; categoryId: string; subcategoryId: string };
 
+type CatalogCategory = {
+  id: string;
+  name: string;
+  children: { id: string; name: string }[];
+};
+
 function normalize(value: string) {
   return value.toLocaleLowerCase("es").trim();
+}
+
+function readCatalogFilter(
+  params: { get(name: string): string | null },
+  categories: CatalogCategory[],
+): CategoryFilter {
+  if (params.get("vista") === "ofertas") return { kind: "all" };
+  const categoria = params.get("categoria");
+  const sub = params.get("sub");
+  if (!categoria) return { kind: "all" };
+  const match = categories.find((item) => item.id === categoria || item.name === categoria);
+  const nestedParent = match
+    ? null
+    : categories.find((item) =>
+        item.children.some((child) => child.id === categoria || child.name === categoria),
+      );
+  const resolved = match ?? nestedParent;
+  if (!resolved) return { kind: "all" };
+  const child = sub
+    ? resolved.children.find((item) => item.id === sub || item.name === sub)
+    : nestedParent
+      ? resolved.children.find((item) => item.id === categoria || item.name === categoria)
+      : undefined;
+  if (child) return { kind: "sub", categoryId: resolved.id, subcategoryId: child.id };
+  return { kind: "category", categoryId: resolved.id };
+}
+
+function catalogHref(filter: CategoryFilter, extras?: { vista?: string | null; q?: string | null }) {
+  const params = new URLSearchParams();
+  if (extras?.vista === "ofertas") {
+    params.set("vista", "ofertas");
+  } else {
+    if (filter.kind === "category" || filter.kind === "sub") params.set("categoria", filter.categoryId);
+    if (filter.kind === "sub") params.set("sub", filter.subcategoryId);
+    if (extras?.q) params.set("q", extras.q);
+  }
+  const query = params.toString();
+  return query ? `/tienda?${query}` : "/tienda";
 }
 
 const subcategoryThumbs: Record<string, string> = {
@@ -96,7 +140,7 @@ function subcategoryCover(
 
 export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   const router = useRouter();
-  const vista = useSearchParams().get("vista");
+  const searchParams = useSearchParams();
   const { config, updateConfig } = useStoreConfig();
   const {
     products,
@@ -112,12 +156,11 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   const [categoryQuery, setCategoryQuery] = useState("");
   const [filter, setFilter] = useState<CategoryFilter>({ kind: "all" });
   const [expanded, setExpanded] = useState<string[]>([]);
-  const appliedQuery = useRef(false);
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [showOutOfStock, setShowOutOfStock] = useState(false);
-  const [onlyOffers, setOnlyOffers] = useState(false);
+  const [onlyOffers, setOnlyOffers] = useState(() => searchParams.get("vista") === "ofertas");
   const [sortKey, setSortKey] = useState<SortKey>("relevant");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -133,56 +176,62 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   const { stock } = useOrders();
 
   const previousVista = useRef<string | null | undefined>(undefined);
+  const searchKey = searchParams.toString();
+
+  function applyFilter(next: CategoryFilter, historyMode: "push" | "replace" = "push") {
+    setFilter(next);
+    if (admin) return;
+    const href = catalogHref(next);
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (current === href) return;
+    if (historyMode === "replace") window.history.replaceState({ mzCatalog: true }, "", href);
+    else window.history.pushState({ mzCatalog: true }, "", href);
+    setOnlyOffers(false);
+  }
 
   useEffect(() => {
     const sync = () => setSession(readSession());
     sync();
     window.addEventListener(SESSION_EVENT, sync);
-    const q = new URLSearchParams(window.location.search).get("q");
-    if (q) setQuery(q);
     return () => window.removeEventListener(SESSION_EVENT, sync);
   }, []);
 
   useEffect(() => {
-    setOnlyOffers(vista === "ofertas");
-    if (previousVista.current && !vista) setFilter({ kind: "all" });
-    previousVista.current = vista;
-  }, [vista]);
-
-  useEffect(() => {
-    if (appliedQuery.current) return;
-    const params = new URLSearchParams(window.location.search);
-    const categoria = params.get("categoria");
-    const sub = params.get("sub");
-    if (!categoria) {
-      appliedQuery.current = true;
-      return;
-    }
-    const match = config.categories.find((item) => item.id === categoria || item.name === categoria);
-    const nestedParent = match
-      ? null
-      : config.categories.find((item) =>
-          item.children.some((child) => child.id === categoria || child.name === categoria),
+    if (admin) return;
+    const syncFromLocation = () => {
+      const params = new URLSearchParams(window.location.search);
+      const nextFilter = readCatalogFilter(params, config.categories);
+      setFilter(nextFilter);
+      const isOffers = params.get("vista") === "ofertas";
+      setOnlyOffers(isOffers);
+      const q = params.get("q");
+      if (q !== null) setQuery(q);
+      else if (!params.toString()) setQuery("");
+      if (nextFilter.kind !== "all") {
+        setExpanded((current) =>
+          current.includes(nextFilter.categoryId) ? current : [...current, nextFilter.categoryId],
         );
-    if (!match && !nestedParent) return;
-    const resolved = match ?? nestedParent;
-    if (!resolved) return;
-    const child = sub
-      ? resolved.children.find((item) => item.id === sub || item.name === sub)
-      : nestedParent
-        ? resolved.children.find((item) => item.id === categoria || item.name === categoria)
-        : undefined;
-    if (child) {
-      setFilter({ kind: "sub", categoryId: resolved.id, subcategoryId: child.id });
-    } else {
-      setFilter({ kind: "category", categoryId: resolved.id });
-    }
-    setExpanded((current) => (current.includes(resolved.id) ? current : [...current, resolved.id]));
-    appliedQuery.current = true;
-  }, [config.categories]);
+      }
+      const currentVista = params.get("vista");
+      if (previousVista.current !== undefined && previousVista.current !== currentVista) {
+        setSelectedBrands([]);
+        setMinPrice("");
+        setMaxPrice("");
+        setShowOutOfStock(false);
+        setCategoryQuery("");
+        setSortKey("relevant");
+        setFiltersOpen(false);
+        if (isOffers) setFilter({ kind: "all" });
+      }
+      previousVista.current = currentVista;
+    };
+    syncFromLocation();
+    window.addEventListener("popstate", syncFromLocation);
+    return () => window.removeEventListener("popstate", syncFromLocation);
+  }, [admin, searchKey, config.categories]);
 
   useEffect(() => {
-    if (filter.kind === "all") return;
+    if (filter.kind === "all" || config.categories.length === 0) return;
     const match = config.categories.find((item) => item.id === filter.categoryId);
     if (!match) {
       setFilter({ kind: "all" });
@@ -214,26 +263,27 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
         { categoryId: product.categoryId, subcategoryId: product.subcategoryId },
         placements,
       );
+      const catalogFilter = onlyOffers ? ({ kind: "all" } as const) : filter;
       const parent =
-        filter.kind === "all"
+        catalogFilter.kind === "all"
           ? null
-          : (config.categories.find((item) => item.id === filter.categoryId) ?? null);
+          : (config.categories.find((item) => item.id === catalogFilter.categoryId) ?? null);
       const ids = parent ? collectCategoryFilterIds(parent) : [];
       const child =
-        filter.kind === "sub"
-          ? parent?.children.find((item) => item.id === filter.subcategoryId)
+        catalogFilter.kind === "sub"
+          ? parent?.children.find((item) => item.id === catalogFilter.subcategoryId)
           : null;
       const childIds = new Set(parent?.children.map((item) => item.id) ?? []);
       const onChild =
         childIds.has(vis.subcategoryId) ||
         (vis.categoryId !== parent?.id && childIds.has(vis.categoryId));
       const matchesCategory =
-        filter.kind === "all" ||
-        (filter.kind === "category" &&
+        catalogFilter.kind === "all" ||
+        (catalogFilter.kind === "category" &&
           parent &&
           (vis.categoryId === parent.id || vis.subcategoryId === parent.id || ids.includes(vis.categoryId)) &&
           !onChild) ||
-        (filter.kind === "sub" &&
+        (catalogFilter.kind === "sub" &&
           child &&
           (vis.subcategoryId === child.id || vis.categoryId === child.id));
       const matchesQuery =
@@ -493,7 +543,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
             <button
               type="button"
               aria-pressed={filter.kind === "all"}
-              onClick={() => setFilter({ kind: "all" })}
+              onClick={() => applyFilter({ kind: "all" })}
               onDragOver={(event) => {
                 if (!admin) return;
                 event.preventDefault();
@@ -565,7 +615,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                     aria-expanded={item.children.length > 0 ? open : undefined}
                     aria-pressed={inBranch}
                     onClick={() => {
-                      setFilter({ kind: "category", categoryId: item.id });
+                      applyFilter({ kind: "category", categoryId: item.id });
                       setExpanded((current) =>
                         current.includes(item.id) && selected ? current.filter((id) => id !== item.id) : [...new Set([...current, item.id])],
                       );
@@ -665,7 +715,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                                   }}
                                   aria-pressed={childSelected}
                                   onClick={() => {
-                                    setFilter({ kind: "sub", categoryId: item.id, subcategoryId: child.id });
+                                    applyFilter({ kind: "sub", categoryId: item.id, subcategoryId: child.id });
                                     setExpanded((current) => (current.includes(item.id) ? current : [...current, item.id]));
                                     setFiltersOpen(false);
                                   }}
@@ -779,8 +829,12 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
             type="checkbox"
             checked={onlyOffers}
             onChange={(event) => {
-              setOnlyOffers(event.target.checked);
-              if (!event.target.checked && vista === "ofertas" && !admin) router.replace("/tienda");
+              if (admin) {
+                setOnlyOffers(event.target.checked);
+                return;
+              }
+              if (event.target.checked) window.location.assign("/tienda?vista=ofertas");
+              else window.location.assign("/tienda");
             }}
             className="h-4 w-4 accent-sky-500"
           />
@@ -797,7 +851,10 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       ? (activeCategory?.children.find((item) => item.id === filter.subcategoryId) ?? null)
       : null;
   const showSubcategoryGrid =
-    filter.kind === "category" && Boolean(activeCategory && activeCategory.children.length > 0) && normalize(query) === "";
+    !onlyOffers &&
+    filter.kind === "category" &&
+    Boolean(activeCategory && activeCategory.children.length > 0) &&
+    normalize(query) === "";
   const panelKey = showSubcategoryGrid
     ? `grid-${activeCategory?.id}`
     : filter.kind === "sub"
@@ -814,7 +871,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-6 sm:py-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <h1 className="text-xl font-bold tracking-tight text-gray-900 sm:text-3xl">
-            {vista === "ofertas" ? "Ofertas" : "Nuestra tienda"}
+            {onlyOffers ? "Ofertas" : "Nuestra tienda"}
           </h1>
           {admin ? (
             <button
@@ -903,7 +960,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                       }),
                     );
                     const openSubcategory = () => {
-                      setFilter({ kind: "sub", categoryId: activeCategory.id, subcategoryId: child.id });
+                      applyFilter({ kind: "sub", categoryId: activeCategory.id, subcategoryId: child.id });
                       setExpanded((current) =>
                         current.includes(activeCategory.id) ? current : [...current, activeCategory.id],
                       );
@@ -978,7 +1035,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
               <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
                 <button
                   type="button"
-                  onClick={() => setFilter({ kind: "category", categoryId: activeCategory.id })}
+                  onClick={() => applyFilter({ kind: "category", categoryId: activeCategory.id })}
                   className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 font-semibold text-gray-900 transition-colors hover:border-sky-300 hover:text-sky-700"
                 >
                   <span aria-hidden="true">←</span>
@@ -999,8 +1056,11 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                 <button
                   type="button"
                   onClick={() => {
-                    setOnlyOffers(false);
-                    if (vista === "ofertas" && !admin) router.replace("/tienda");
+                    if (admin) {
+                      setOnlyOffers(false);
+                      return;
+                    }
+                    window.location.assign("/tienda");
                   }}
                   className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 px-3 py-1 text-sm font-semibold text-sky-700 transition-colors hover:bg-sky-200"
                 >
@@ -1011,15 +1071,18 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                 <button
                   type="button"
                   onClick={() => {
-                    setOnlyOffers(false);
                     setSelectedBrands([]);
                     setMinPrice("");
                     setMaxPrice("");
                     setQuery("");
                     setCategoryQuery("");
                     setShowOutOfStock(false);
-                    setFilter({ kind: "all" });
-                    if (vista && !admin) router.replace("/tienda");
+                    if (admin) {
+                      setOnlyOffers(false);
+                      setFilter({ kind: "all" });
+                      return;
+                    }
+                    window.location.assign("/tienda");
                   }}
                   className="text-sm font-semibold text-sky-600 transition-colors hover:text-sky-700"
                 >

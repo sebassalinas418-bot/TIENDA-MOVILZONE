@@ -191,15 +191,19 @@ function SectionLinks({ pathname, vista }: { pathname: string; vista: string | n
       {links.map((link) => {
         const active = linkIsActive(pathname, vista, link.href, link.label);
         return (
-          <Link
+          <a
             key={link.label}
             href={link.href}
+            onClick={(event) => {
+              event.preventDefault();
+              window.location.assign(link.href);
+            }}
             className={`shrink-0 rounded-full px-2.5 py-1 text-[13px] font-medium transition-colors sm:px-3 sm:py-1.5 sm:text-sm ${
               active ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white"
             }`}
           >
             {link.label}
-          </Link>
+          </a>
         );
       })}
     </div>
