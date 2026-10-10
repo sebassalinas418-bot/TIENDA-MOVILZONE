@@ -10,7 +10,7 @@ import { PageSkyFade } from "@/components/site-frame";
 import { SiteFooter } from "@/components/store-sections";
 import type { CatalogProduct } from "@/lib/offers";
 import { useCart } from "@/lib/cart";
-import { readSession, signOut, type DemoSession } from "@/lib/session";
+import { readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
 
 export function Catalog() {
   const router = useRouter();
@@ -20,7 +20,10 @@ export function Catalog() {
   const { addItem, openCart, closeCart } = useCart();
 
   useEffect(() => {
-    setSession(readSession());
+    const sync = () => setSession(readSession());
+    sync();
+    window.addEventListener(SESSION_EVENT, sync);
+    return () => window.removeEventListener(SESSION_EVENT, sync);
   }, []);
 
   function handleAddToCart(product: CatalogProduct) {

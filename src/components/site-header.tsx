@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { AccountMenu } from "@/components/account-menu";
 import { useStoreConfig } from "@/config/store-config";
 import { useAdminAccess } from "@/lib/admin-access";
 import { useCart } from "@/lib/cart";
@@ -41,30 +42,13 @@ export function SiteHeader({
 }: SiteHeaderProps) {
   const { config } = useStoreConfig();
   const { count } = useCart();
-  const { isAdmin, setDevAdmin } = useAdminAccess(session);
-  const [accountOpen, setAccountOpen] = useState(false);
-  const accountRef = useRef<HTMLDivElement>(null);
+  const { isAdmin } = useAdminAccess(session);
   const whatsappHref = `https://wa.me/${config.whatsapp}`;
-  useEffect(() => {
-    if (!accountOpen) return;
-    const onPointer = (event: MouseEvent) => {
-      if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAccountOpen(false);
-    };
-    window.addEventListener("mousedown", onPointer);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("mousedown", onPointer);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [accountOpen]);
 
   const instagramHref = `https://instagram.com/${config.instagram}`;
 
   return (
-    <header id="inicio" className="sticky top-0 z-30 w-full">
+    <header id="inicio" className="sticky top-0 z-40 w-full">
       <TopTicker />
       <div className="border-b border-white/10 bg-black">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:gap-6">
@@ -110,95 +94,7 @@ export function SiteHeader({
               Panel Admin
             </Link>
           ) : null}
-          <div className="relative" ref={accountRef}>
-            <button
-              type="button"
-              aria-expanded={accountOpen}
-              aria-haspopup="menu"
-              onClick={() => setAccountOpen((open) => !open)}
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-white hover:bg-white/10"
-            >
-              <UserIcon />
-              {session ? session.name : "Mi cuenta"}
-            </button>
-            {accountOpen ? (
-              <div
-                role="menu"
-                className="absolute right-0 z-40 mt-2 w-64 rounded-2xl border border-white/10 bg-neutral-950 p-2 text-white shadow-xl"
-              >
-                {session ? (
-                  <>
-                    <p className="px-3 py-2 text-xs text-white/50">{session.email}</p>
-                    <Link
-                      href="/mi-cuenta"
-                      role="menuitem"
-                      onClick={() => setAccountOpen(false)}
-                      className="block rounded-xl px-3 py-2 text-sm font-medium hover:bg-white/10"
-                    >
-                      Mi cuenta
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      href="/login"
-                      role="menuitem"
-                      onClick={() => setAccountOpen(false)}
-                      className="block rounded-xl px-3 py-2 text-sm font-medium hover:bg-white/10"
-                    >
-                      Iniciar sesión
-                    </Link>
-                    <Link
-                      href="/login"
-                      role="menuitem"
-                      onClick={() => setAccountOpen(false)}
-                      className="block rounded-xl px-3 py-2 text-sm font-medium hover:bg-white/10"
-                    >
-                      Crear cuenta
-                    </Link>
-                  </>
-                )}
-                <label className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm">
-                  <span>
-                    Modo administrador
-                    <span className="mt-0.5 block text-[11px] font-normal text-white/45">
-                      {session?.role === "admin" ? "Esta cuenta es administradora" : "Interruptor de prueba"}
-                    </span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={isAdmin}
-                    disabled={session?.role === "admin"}
-                    onChange={(event) => setDevAdmin(event.target.checked)}
-                    className="h-4 w-4 accent-sky-500 disabled:opacity-70"
-                  />
-                </label>
-                {isAdmin ? (
-                  <Link
-                    href="/admin"
-                    role="menuitem"
-                    onClick={() => setAccountOpen(false)}
-                    className="block rounded-xl px-3 py-2 text-sm font-semibold text-sky-300 hover:bg-white/10"
-                  >
-                    Abrir Panel Admin
-                  </Link>
-                ) : null}
-                {session ? (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setAccountOpen(false);
-                      onLogout();
-                    }}
-                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10"
-                  >
-                    Cerrar sesión
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          <AccountMenu session={session} onLogout={onLogout} />
           <button
             type="button"
             onClick={onCart}
@@ -324,15 +220,6 @@ function SearchIcon() {
     <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
       <circle cx="7" cy="7" r="4" />
       <path d="m10.2 10.2 2.6 2.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function UserIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <circle cx="8" cy="5.5" r="2.2" />
-      <path d="M3.5 13.2c.7-2 2.3-3 4.5-3s3.8 1 4.5 3" strokeLinecap="round" />
     </svg>
   );
 }

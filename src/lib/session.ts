@@ -15,8 +15,10 @@ export type DemoSession = {
 };
 
 const STORAGE_KEY = "movilzone.demo-session";
+const REMEMBER_KEY = "movilzone.remember-session";
 const DEV_ADMIN_KEY = "movilzone.dev-admin";
 export const SESSION_EVENT = "movilzone-session";
+export const STORE_OWNER_EMAIL = "sebassalinas418@gmail.com";
 
 export const demoAccount = {
   email: "demo@movilzone.com",
@@ -32,16 +34,15 @@ export const adminAccount = {
   role: "admin" as const,
 };
 
-export function readSession(): DemoSession | null {
-  if (typeof window === "undefined") return null;
-
-  const raw = window.sessionStorage.getItem(STORAGE_KEY);
+function parseSessionRaw(raw: string | null): DemoSession | null {
   if (!raw) return null;
-
   try {
     const parsed = JSON.parse(raw) as Partial<DemoSession>;
     if (!parsed.email || !parsed.name) return null;
-    const role: DemoRole = parsed.role === "admin" || parsed.email === adminAccount.email ? "admin" : "cliente";
+    const role: DemoRole =
+      parsed.role === "admin" || parsed.email === adminAccount.email || isListedStoreAdminEmail(parsed.email)
+        ? "admin"
+        : "cliente";
     return {
       email: parsed.email,
       name: parsed.name,
@@ -53,7 +54,24 @@ export function readSession(): DemoSession | null {
   }
 }
 
-export function signIn(email: string, password: string): DemoSession | null {
+function writeActiveSession(session: DemoSession, remember = false) {
+  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  if (remember) window.localStorage.setItem(REMEMBER_KEY, JSON.stringify(session));
+  else window.localStorage.removeItem(REMEMBER_KEY);
+  window.dispatchEvent(new Event(SESSION_EVENT));
+}
+
+export function readSession(): DemoSession | null {
+  if (typeof window === "undefined") return null;
+  const live = parseSessionRaw(window.sessionStorage.getItem(STORAGE_KEY));
+  if (live) return live;
+  const remembered = parseSessionRaw(window.localStorage.getItem(REMEMBER_KEY));
+  if (!remembered) return null;
+  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(remembered));
+  return remembered;
+}
+
+export function signIn(email: string, password: string, remember = false): DemoSession | null {
   const normalized = email.trim().toLowerCase();
   const account = [demoAccount, adminAccount].find(
     (item) => item.email === normalized && item.password === password,
@@ -66,8 +84,7 @@ export function signIn(email: string, password: string): DemoSession | null {
     role: account.role,
     verified: true,
   };
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  window.dispatchEvent(new Event(SESSION_EVENT));
+  writeActiveSession(session, remember);
   return session;
 }
 
@@ -75,17 +92,15 @@ export function isSessionVerified(session: DemoSession | null) {
   return Boolean(session && session.verified !== false);
 }
 
-export function openCustomerSession(name: string, email: string, verified = true) {
+export function openCustomerSession(name: string, email: string, verified = true, remember = false) {
   const session: DemoSession = { name, email, role: "cliente", verified };
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  window.dispatchEvent(new Event(SESSION_EVENT));
+  writeActiveSession(session, remember);
   return session;
 }
 
-export function openAdminSession(name: string, email: string) {
+export function openAdminSession(name: string, email: string, remember = false) {
   const session: DemoSession = { name, email, role: "admin", verified: true };
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  window.dispatchEvent(new Event(SESSION_EVENT));
+  writeActiveSession(session, remember);
   return session;
 }
 
@@ -110,6 +125,7 @@ export async function syncStoreSessionCookie(input: {
 export function signOut() {
   window.sessionStorage.removeItem(STORAGE_KEY);
   window.sessionStorage.removeItem("movilzone.taller-token");
+  window.localStorage.removeItem(REMEMBER_KEY);
   window.dispatchEvent(new Event(SESSION_EVENT));
   void fetch("/api/store-auth/session", { method: "DELETE", credentials: "include" });
 }
@@ -125,10 +141,16 @@ export function writeDevAdmin(enabled: boolean) {
 }
 
 export function isListedStoreAdminEmail(email?: string | null) {
-  const listed = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || "").trim().toLowerCase();
-  return Boolean(listed && email?.trim().toLowerCase() === listed);
+  const listed = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || STORE_OWNER_EMAIL).trim().toLowerCase();
+  const value = email?.trim().toLowerCase();
+  return Boolean(value && (value === listed || value === STORE_OWNER_EMAIL));
+}
+
+export function isStoreOwnerEmail(email?: string | null) {
+  return email?.trim().toLowerCase() === STORE_OWNER_EMAIL;
 }
 
 export function isAdminAccess(session: DemoSession | null, devAdmin = readDevAdmin()) {
-  return session?.role === "admin" || isListedStoreAdminEmail(session?.email) || devAdmin;
+  if (session?.role === "admin" || isListedStoreAdminEmail(session?.email)) return true;
+  return Boolean(devAdmin && isStoreOwnerEmail(session?.email));
 }

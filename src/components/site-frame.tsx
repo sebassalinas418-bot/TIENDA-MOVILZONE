@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { LoginPrompt } from "@/components/login-prompt";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/store-sections";
-import { isSessionVerified, readSession, signOut, type DemoSession } from "@/lib/session";
+import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
 import { useCart } from "@/lib/cart";
 
 export function PageSkyFade() {
@@ -25,7 +25,10 @@ export function SiteFrame({ children }: { children: ReactNode }) {
   const { openCart, closeCart } = useCart();
 
   useEffect(() => {
-    setSession(readSession());
+    const sync = () => setSession(readSession());
+    sync();
+    window.addEventListener(SESSION_EVENT, sync);
+    return () => window.removeEventListener(SESSION_EVENT, sync);
   }, []);
 
   return (

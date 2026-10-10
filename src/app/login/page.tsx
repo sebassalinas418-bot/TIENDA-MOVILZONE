@@ -3,16 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { SiteFrame } from "@/components/site-frame";
-import { clearTallerToken, readTallerToken, signInTallerAdmin } from "@/services/taller-gestio/browser";
-import {
-  adminAccount,
-  demoAccount,
-  isListedStoreAdminEmail,
-  openAdminSession,
-  openCustomerSession,
-  signIn,
-  syncStoreSessionCookie,
-} from "@/lib/session";
+import { adminAccount, demoAccount, signIn, syncStoreSessionCookie } from "@/lib/session";
+import { authenticateStoreUser, registerStoreUser, resendStoreVerification } from "@/lib/store-auth-client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,17 +26,7 @@ export default function LoginPage() {
     if (mode === "register") {
       setBusy(true);
       try {
-        const response = await fetch("/api/store-auth/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, password }),
-        });
-        const body = (await response.json()) as {
-          ok?: boolean;
-          error?: string;
-          mailed?: boolean;
-          devVerifyUrl?: string;
-        };
+        const body = await registerStoreUser(name, email, password);
         if (!body.ok) {
           setError(body.error || "No se pudo crear la cuenta.");
           return;
@@ -65,52 +47,14 @@ export default function LoginPage() {
       return;
     }
 
-    const session = signIn(email, password);
-    if (session) {
-      clearTallerToken();
-      await syncStoreSessionCookie({ email, password });
-      router.push("/");
-      return;
-    }
-
     setBusy(true);
     try {
-      const storeResponse = await fetch("/api/store-auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const storeBody = (await storeResponse.json()) as {
-        ok?: boolean;
-        pending?: boolean;
-        error?: string;
-        customer?: { name: string; email: string; verified?: boolean };
-      };
-      if (storeBody.ok && storeBody.customer) {
-        clearTallerToken();
-        const verified = storeBody.customer.verified !== false && !storeBody.pending;
-        if (isListedStoreAdminEmail(storeBody.customer.email)) {
-          openAdminSession(storeBody.customer.name, storeBody.customer.email);
-        } else {
-          openCustomerSession(storeBody.customer.name, storeBody.customer.email, verified);
-        }
-        router.push(verified ? "/" : "/mi-cuenta");
+      const result = await authenticateStoreUser(email, password);
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
-
-      const tallerAdmin = await signInTallerAdmin(email, password);
-      if (!tallerAdmin) {
-        setError(storeBody.error || "Esos datos no coinciden con una cuenta de la tienda ni del taller.");
-        return;
-      }
-
-      openAdminSession(tallerAdmin.name, tallerAdmin.email);
-      await syncStoreSessionCookie({
-        email: tallerAdmin.email,
-        name: tallerAdmin.name,
-        tallerToken: readTallerToken(),
-      });
-      router.push("/");
+      router.push(result.verified ? "/" : "/mi-cuenta");
     } catch {
       setError("No se pudo iniciar sesión.");
     } finally {
@@ -127,17 +71,7 @@ export default function LoginPage() {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/store-auth/resend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: target }),
-      });
-      const body = (await response.json()) as {
-        ok?: boolean;
-        error?: string;
-        mailed?: boolean;
-        devVerifyUrl?: string;
-      };
+      const body = await resendStoreVerification(target);
       if (!body.ok) {
         setError(body.error || "No se pudo reenviar.");
         return;

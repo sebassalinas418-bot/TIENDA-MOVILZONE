@@ -14,7 +14,7 @@ import { useCatalog, type CatalogProduct } from "@/lib/offers";
 import { storeVisibleCategory } from "@/lib/store-product-placements";
 import { useCart } from "@/lib/cart";
 import { useOrders } from "@/lib/orders";
-import { isSessionVerified, readSession, signOut, type DemoSession } from "@/lib/session";
+import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
 import {
   collectCategoryFilterIds,
   isTallerOrigin,
@@ -135,9 +135,12 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   const previousVista = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    setSession(readSession());
+    const sync = () => setSession(readSession());
+    sync();
+    window.addEventListener(SESSION_EVENT, sync);
     const q = new URLSearchParams(window.location.search).get("q");
     if (q) setQuery(q);
+    return () => window.removeEventListener(SESSION_EVENT, sync);
   }, []);
 
   useEffect(() => {

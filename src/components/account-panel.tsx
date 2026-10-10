@@ -68,6 +68,8 @@ export function AccountPanel() {
     }
     setSession(current);
     setName(current.name);
+    const seccion = new URLSearchParams(window.location.search).get("seccion");
+    if (seccion === "pedidos" || seccion === "cuenta") setSection(seccion);
   }, [router]);
 
   useEffect(() => {
