@@ -3,7 +3,7 @@ import { readTallerCatalog } from "@/services/taller-gestio/server";
 
 export async function readCachedTallerCatalog() {
   "use cache";
-  cacheLife({ stale: 30, revalidate: 1, expire: 300 });
+  cacheLife({ stale: 0, revalidate: 0, expire: 1 });
   try {
     return await readTallerCatalog();
   } catch {

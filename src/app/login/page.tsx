@@ -3,11 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { SiteFrame } from "@/components/site-frame";
-import { adminAccount, demoAccount, signIn, syncStoreSessionCookie } from "@/lib/session";
+import { useStoreConfig } from "@/config/store-config";
 import { authenticateStoreUser, registerStoreUser, resendStoreVerification } from "@/lib/store-auth-client";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { config } = useStoreConfig();
+  const recoverHref = `https://wa.me/${config.whatsapp}?text=${encodeURIComponent("Hola, necesito recuperar el acceso a mi cuenta de Movil zone.")}`;
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -96,11 +98,11 @@ export default function LoginPage() {
           <h1 className="text-xl font-bold tracking-tight">
             {mode === "register" ? "Crear cuenta" : "Iniciar sesión"}
           </h1>
-          <p className="mt-2 text-sm leading-6 text-gray-500">
-            {mode === "register"
-              ? "Te vamos a mandar un enlace para confirmar el correo. Hasta entonces la cuenta no puede operar."
-              : "Las cuentas de prueba quedan en este navegador. El administrador de TallerGestio entra con el mismo correo del taller."}
-          </p>
+          {mode === "register" ? (
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              Te vamos a mandar un enlace para confirmar el correo. Hasta entonces la cuenta no puede operar.
+            </p>
+          ) : null}
           <div className="mt-4 flex gap-2">
             <button
               type="button"
@@ -188,49 +190,25 @@ export default function LoginPage() {
             {busy ? "Esperá..." : mode === "register" ? "Crear cuenta" : "Entrar"}
           </button>
           {mode === "login" ? (
-            <button
-              type="button"
-              onClick={() => void resend()}
-              disabled={busy}
-              className="mt-2 w-full text-center text-xs font-semibold text-sky-700 hover:underline disabled:opacity-50"
-            >
-              Reenviar correo de verificación
-            </button>
+            <>
+              <a
+                href={recoverHref}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 block text-center text-xs font-semibold text-sky-700 hover:underline"
+              >
+                ¿Olvidaste tu contraseña?
+              </a>
+              <button
+                type="button"
+                onClick={() => void resend()}
+                disabled={busy}
+                className="mt-2 w-full text-center text-xs font-semibold text-gray-500 hover:text-sky-700 hover:underline disabled:opacity-50"
+              >
+                Reenviar correo de verificación
+              </button>
+            </>
           ) : null}
-
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => {
-                signIn(demoAccount.email, demoAccount.password);
-                void syncStoreSessionCookie({
-                  email: demoAccount.email,
-                  password: demoAccount.password,
-                }).then(() => router.push("/"));
-              }}
-              className="rounded-xl border border-gray-200 px-3 py-2.5 text-left text-xs leading-5 text-gray-700 hover:border-sky-400"
-            >
-              <span className="block font-semibold text-gray-900">Entrar como cliente</span>
-              {demoAccount.email}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                signIn(adminAccount.email, adminAccount.password);
-                void syncStoreSessionCookie({
-                  email: adminAccount.email,
-                  password: adminAccount.password,
-                }).then(() => router.push("/"));
-              }}
-              className="rounded-xl border border-gray-200 px-3 py-2.5 text-left text-xs leading-5 text-gray-700 hover:border-sky-400"
-            >
-              <span className="block font-semibold text-gray-900">Entrar como admin</span>
-              {adminAccount.email}
-            </button>
-          </div>
-          <p className="mt-3 text-xs leading-5 text-gray-500">
-            Cliente: {demoAccount.password}. Admin: {adminAccount.password}.
-          </p>
         </form>
       </main>
     </SiteFrame>

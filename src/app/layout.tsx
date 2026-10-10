@@ -6,6 +6,7 @@ import { CatalogProvider } from "@/lib/offers";
 import { OrdersProvider } from "@/lib/orders";
 import { CartDrawer } from "@/components/cart-drawer";
 import { StoreMobileChrome } from "@/components/mobile-nav/store-mobile-chrome";
+import { LiveCatalogShell } from "@/components/live-catalog-shell";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,14 +25,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col bg-[#f7f8fa] font-sans text-gray-900">
         <StoreConfigProvider>
           <OrdersProvider>
-            <CatalogProvider>
+            <LiveCatalogShell>
               <CartProvider>
                 <StoreMobileChrome>
                   {children}
                   <CartDrawer />
                 </StoreMobileChrome>
               </CartProvider>
-            </CatalogProvider>
+            </LiveCatalogShell>
           </OrdersProvider>
         </StoreConfigProvider>
       </body>

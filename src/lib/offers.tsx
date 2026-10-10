@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { describeStock, products as baseProducts, type Product } from "@/data/products";
 import { useStoreConfig } from "@/config/store-config";
 import { useOrders } from "@/lib/orders";
@@ -241,9 +241,11 @@ function loadExtras() {
 export function CatalogProvider({
   children,
   initialRemote = null,
+  initialHidden = [],
 }: {
   children: ReactNode;
   initialRemote?: Product[] | null;
+  initialHidden?: string[];
 }) {
   const { config, updateConfig } = useStoreConfig();
   const { stock, setProductStock } = useOrders();
@@ -254,7 +256,14 @@ export function CatalogProvider({
   const [ready, setReady] = useState(false);
   const [placements, setPlacements] = useState<Record<string, StoreProductPlacement>>({});
   const [images, setImages] = useState<Record<string, string>>({});
-  const [hidden, setHidden] = useState<Record<string, true>>({});
+  const [hidden, setHidden] = useState<Record<string, true>>(() => {
+    const next: Record<string, true> = {};
+    for (const id of initialHidden) {
+      if (id) next[id] = true;
+    }
+    return next;
+  });
+  const overlayReady = useRef(initialHidden.length > 0);
 
   useEffect(() => {
     setOffers(loadOffers());
@@ -262,7 +271,8 @@ export function CatalogProvider({
     setPrices(loadPrices());
     setPlacements(loadProductPlacements());
     setImages(loadImages());
-    setHidden(loadHidden());
+    const localHidden = loadHidden();
+    setHidden((current) => (Object.keys(current).length > 0 ? current : localHidden));
     setReady(true);
   }, []);
 
@@ -325,6 +335,58 @@ export function CatalogProvider({
 
     void pull();
     const timer = window.setInterval(() => void pull(), 4000);
+    const onShow = () => {
+      if (document.visibilityState === "hidden") return;
+      void pull();
+    };
+    window.addEventListener("pageshow", onShow);
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      cancel = true;
+      window.clearInterval(timer);
+      window.removeEventListener("pageshow", onShow);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    let cancel = false;
+
+    async function pullOverlay() {
+      try {
+        const response = await fetch("/api/store-overlay", { cache: "no-store" });
+        if (!response.ok) return;
+        const body = (await response.json()) as { hidden?: unknown };
+        if (cancel || !Array.isArray(body.hidden)) return;
+        const next: Record<string, true> = {};
+        for (const id of body.hidden) {
+          if (typeof id === "string" && id) next[id] = true;
+        }
+        setHidden((current) => {
+          if (!overlayReady.current) {
+            overlayReady.current = true;
+            if (Object.keys(next).length === 0 && Object.keys(current).length > 0) {
+              void fetch("/api/store-overlay", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                cache: "no-store",
+                body: JSON.stringify({ hidden: Object.keys(current) }),
+              });
+              return current;
+            }
+          }
+          const currentKeys = Object.keys(current).sort().join(",");
+          const nextKeys = Object.keys(next).sort().join(",");
+          return currentKeys === nextKeys ? current : next;
+        });
+      } catch {
+        /* se mantiene el overlay local */
+      }
+    }
+
+    void pullOverlay();
+    const timer = window.setInterval(() => void pullOverlay(), 4000);
     return () => {
       cancel = true;
       window.clearInterval(timer);
@@ -343,7 +405,7 @@ export function CatalogProvider({
 
   const products = useMemo(
     () =>
-      [...(remote ?? baseProducts), ...extras].map((product) => ({
+      [...(remote ?? []), ...extras].map((product) => ({
         ...applyOffer(
           {
             ...product,
@@ -444,12 +506,17 @@ export function CatalogProvider({
 
   function toggleProductHidden(productId: string) {
     setHidden((current) => {
-      if (current[productId]) {
-        const next = { ...current };
-        delete next[productId];
-        return next;
-      }
-      return { ...current, [productId]: true };
+      const next = { ...current };
+      if (next[productId]) delete next[productId];
+      else next[productId] = true;
+      overlayReady.current = true;
+      void fetch("/api/store-overlay", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ hidden: Object.keys(next) }),
+      });
+      return next;
     });
   }
 
