@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  Suspense,
   useContext,
   useEffect,
   useState,
@@ -19,57 +20,92 @@ export function useMobileNav() {
 }
 
 export function StoreMobileChrome({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const hide = pathname.startsWith("/admin");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
 
-  useEffect(() => {
-    setDrawerOpen(false);
-  }, [pathname]);
-
   return (
     <MobileNavContext.Provider value={{ openDrawer: () => setDrawerOpen(true) }}>
-      <div className={hide ? undefined : "pb-[calc(3.85rem+env(safe-area-inset-bottom,0px))] lg:pb-0"}>
+      <div className="pb-[calc(3.85rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
         {children}
       </div>
-      {hide ? null : (
-        <>
-          <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-          <MobileBottomNav
-            onAccount={() => {
-              const session = readSession();
-              if (session) {
-                window.location.assign("/mi-cuenta");
-                return;
-              }
-              setLoginOpen(true);
-            }}
-          />
-          <LoginPrompt
-            open={loginOpen}
-            onClose={() => setLoginOpen(false)}
-            onAccept={() => {
-              setLoginOpen(false);
-              window.location.assign("/login");
-            }}
-          />
-        </>
-      )}
+      <Suspense fallback={null}>
+        <MobileChromeLive
+          drawerOpen={drawerOpen}
+          loginOpen={loginOpen}
+          onCloseDrawer={() => setDrawerOpen(false)}
+          onLoginOpen={() => setLoginOpen(true)}
+          onLoginClose={() => setLoginOpen(false)}
+        />
+      </Suspense>
     </MobileNavContext.Provider>
+  );
+}
+
+function MobileChromeLive({
+  drawerOpen,
+  loginOpen,
+  onCloseDrawer,
+  onLoginOpen,
+  onLoginClose,
+}: {
+  drawerOpen: boolean;
+  loginOpen: boolean;
+  onCloseDrawer: () => void;
+  onLoginOpen: () => void;
+  onLoginClose: () => void;
+}) {
+  const pathname = usePathname();
+
+  useEffect(() => {
+    onCloseDrawer();
+  }, [pathname]);
+
+  if (pathname.startsWith("/admin")) return null;
+
+  return (
+    <>
+      <MobileDrawer open={drawerOpen} onClose={onCloseDrawer} />
+      <MobileBottomNav
+        onAccount={() => {
+          const session = readSession();
+          if (session) {
+            window.location.assign("/mi-cuenta");
+            return;
+          }
+          onLoginOpen();
+        }}
+      />
+      <LoginPrompt
+        open={loginOpen}
+        onClose={onLoginClose}
+        onAccept={() => {
+          onLoginClose();
+          window.location.assign("/login");
+        }}
+      />
+    </>
   );
 }
 
 export function MobileMenuButton() {
   const nav = useMobileNav();
+  if (!nav) return null;
+  return (
+    <Suspense fallback={null}>
+      <MobileMenuButtonLive openDrawer={nav.openDrawer} />
+    </Suspense>
+  );
+}
+
+function MobileMenuButtonLive({ openDrawer }: { openDrawer: () => void }) {
   const pathname = usePathname();
-  if (!nav || pathname.startsWith("/admin")) return null;
+  if (pathname.startsWith("/admin")) return null;
 
   return (
     <button
       type="button"
       aria-label="Abrir menú"
-      onClick={nav.openDrawer}
+      onClick={openDrawer}
       className="mr-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/10 lg:hidden"
     >
       <HamburgerIcon />
