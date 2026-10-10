@@ -3,6 +3,8 @@
 import { useState, type ReactNode } from "react";
 import { useStoreConfig } from "@/config/store-config";
 import { brands, formatPrice } from "@/data/products";
+import { AdminImageTools } from "@/components/admin-image-tools";
+import { isolateProductFile } from "@/lib/admin-image-tools/isolate-product";
 import { quotePrice, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
 
 type OfferDraft = {
@@ -64,7 +66,13 @@ export function ProductEditModal({
           });
         }}
       >
-        <ImagePicker value={image} error={imageError} onChange={setImage} onError={setImageError} />
+        <ImagePicker
+          value={image}
+          error={imageError}
+          onChange={setImage}
+          onError={setImageError}
+          searchQuery={product.title}
+        />
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
             <span className="font-medium text-gray-700">Precio original</span>
@@ -360,11 +368,13 @@ function ImagePicker({
   error,
   onChange,
   onError,
+  searchQuery,
 }: {
   value: string;
   error: string;
   onChange: (value: string) => void;
   onError: (value: string) => void;
+  searchQuery?: string;
 }) {
   const [reading, setReading] = useState(false);
 
@@ -377,9 +387,9 @@ function ImagePicker({
     setReading(true);
     onError("");
     try {
-      onChange(await compressImage(file));
+      onChange(searchQuery ? await isolateProductFile(file) : await compressImage(file));
     } catch {
-      onError("No se pudo leer esa imagen.");
+      onError(searchQuery ? "No se pudo quitar el fondo de esa imagen." : "No se pudo leer esa imagen.");
     } finally {
       setReading(false);
     }
@@ -393,7 +403,7 @@ function ImagePicker({
         </div>
       </div>
       <label className="mt-3 flex cursor-pointer items-center justify-center rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400">
-        {reading ? "Leyendo imagen..." : "Subir imagen"}
+        {reading ? (searchQuery ? "Quitando fondo..." : "Leyendo imagen...") : "Subir imagen"}
         <input
           type="file"
           accept="image/*"
@@ -406,6 +416,14 @@ function ImagePicker({
           }}
         />
       </label>
+      {searchQuery ? (
+        <AdminImageTools
+          value={value}
+          searchQuery={searchQuery}
+          onChange={onChange}
+          onError={onError}
+        />
+      ) : null}
       <label className="mt-3 block text-sm">
         <span className="font-medium text-gray-700">O pegá la dirección de la foto</span>
         <input
