@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  serverExternalPackages: ["@imgly/background-removal", "onnxruntime-web"],
   turbopack: {
     rules: {
       "*.css": {

@@ -4,7 +4,8 @@ import { useState, type ReactNode } from "react";
 import { useStoreConfig } from "@/config/store-config";
 import { brands, formatPrice } from "@/data/products";
 import { AdminImageTools } from "@/components/admin-image-tools";
-import { isolateProductImage } from "@/lib/admin-image-tools/isolate-product";
+import { isolateProductFile } from "@/lib/admin-image-tools/isolate-product";
+import { fileToDataUrl, prepareProductImageFile } from "@/lib/admin-image-tools/prepare-product-image";
 import { quotePrice, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
 
 type OfferDraft = {
@@ -388,15 +389,14 @@ function ImagePicker({
     setReading(true);
     onError("");
     try {
-      const compressed = await compressImage(file);
       if (!autoIsolate) {
-        onChange(compressed);
+        onChange(await compressImage(file));
         return;
       }
       try {
-        onChange(await isolateProductImage(compressed));
+        onChange(await isolateProductFile(file));
       } catch {
-        onChange(compressed);
+        onChange(await fileToDataUrl(await prepareProductImageFile(file)));
         onError("Se usó la foto original porque no se pudo quitar el fondo.");
       }
     } catch {
@@ -409,13 +409,13 @@ function ImagePicker({
   return (
     <div>
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-        <div className="flex aspect-square max-h-56 items-center justify-center bg-white">
+        <div className="flex aspect-square max-h-56 items-center justify-center bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0]">
           {value ? <img src={value} alt="" className="h-full w-full object-contain" /> : null}
         </div>
       </div>
       {autoIsolate ? (
         <label className="mt-3 flex cursor-pointer items-center justify-center rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400">
-          {reading ? "Procesando foto..." : "Sacar foto y quitar fondo"}
+          {reading ? "Quitando fondo con IA..." : "Sacar foto y quitar fondo"}
           <input
             type="file"
             accept="image/*"
@@ -437,7 +437,7 @@ function ImagePicker({
             : "bg-sky-500 text-white hover:bg-sky-400"
         }`}
       >
-        {reading ? "Procesando foto..." : "Subir imagen"}
+        {reading ? (autoIsolate ? "Quitando fondo con IA..." : "Leyendo imagen...") : "Subir imagen"}
         <input
           type="file"
           accept="image/*"

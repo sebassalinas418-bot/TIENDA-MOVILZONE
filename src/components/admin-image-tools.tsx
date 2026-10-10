@@ -67,7 +67,7 @@ export function AdminImageTools({
           onClick={() => void removeBackground()}
           className="rounded-full border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {busy === "bg" ? "Quitando fondo..." : "Quitar fondo automáticamente"}
+          {busy === "bg" ? "Quitando fondo con IA..." : "Quitar fondo automáticamente"}
         </button>
         <button
           type="button"
