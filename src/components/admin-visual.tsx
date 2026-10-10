@@ -3,7 +3,6 @@
 import { useState, type ReactNode } from "react";
 import { useStoreConfig } from "@/config/store-config";
 import { brands, formatPrice } from "@/data/products";
-import { AdminImageTools } from "@/components/admin-image-tools";
 import { isolateProductFile } from "@/lib/admin-image-tools/isolate-product";
 import { fileToDataUrl, prepareProductImageFile } from "@/lib/admin-image-tools/prepare-product-image";
 import { quotePrice, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
@@ -449,9 +448,6 @@ function ImagePicker({
           }}
         />
       </label>
-      {autoIsolate ? (
-        <AdminImageTools value={value} onChange={onChange} onError={onError} />
-      ) : null}
       {value.startsWith("data:") ? <p className="mt-2 text-xs text-gray-500">Imagen lista para guardar. Solo se ve en la tienda web.</p> : null}
       {error ? <p className="mt-2 text-sm font-medium text-rose-700">{error}</p> : null}
     </div>
