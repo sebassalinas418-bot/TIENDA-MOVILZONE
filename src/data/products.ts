@@ -19,6 +19,9 @@ export type Product = {
   inStock: boolean;
   onSale: boolean;
   isNew: boolean;
+  reservedQty?: number;
+  sellableStock?: number;
+  pendingHold?: boolean;
 };
 
 export function describeStock(quantity: number) {

@@ -77,7 +77,11 @@ export function ProductCard({
             Oculto
           </span>
         ) : null}
-        {product.badge ? (
+        {product.pendingHold ? (
+          <span className="absolute inset-x-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-amber-600/90 px-2 py-1 text-center text-[10px] font-bold tracking-wide text-white uppercase sm:text-xs">
+            Producto reservado / pendiente de pago
+          </span>
+        ) : product.badge ? (
           <span className="absolute top-2.5 left-2.5 z-10 rounded-lg bg-fuchsia-600 px-2.5 py-1 text-sm font-black tracking-tight text-white shadow-lg shadow-fuchsia-600/35">
             {product.badge}
           </span>
@@ -137,8 +141,14 @@ export function ProductCard({
 
       <button
         type="button"
-        aria-label={product.inStock ? `Agregar ${product.title} al carrito` : `${product.title} agotado`}
-        disabled={!product.inStock}
+        aria-label={
+          product.pendingHold
+            ? `${product.title} reservado / pendiente de pago`
+            : product.inStock
+              ? `Agregar ${product.title} al carrito`
+              : `${product.title} agotado`
+        }
+        disabled={!product.inStock || Boolean(product.pendingHold)}
         onClick={onAddToCart}
         className="absolute right-2 bottom-2 flex h-8 w-8 items-center justify-center rounded-full bg-sky-500 text-white shadow-sm transition-colors duration-200 hover:bg-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:bg-gray-300 sm:right-4 sm:bottom-4 sm:h-10 sm:w-10"
       >

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { describeStock, formatPrice } from "@/data/products";
+import { formatPrice } from "@/data/products";
+import { overlayCatalogStock } from "@/lib/web-pending-stock/availability";
 import { formatPublicHours, useStoreConfig } from "@/config/store-config";
 import { useCatalog, type CatalogProduct } from "@/lib/offers";
 import { useOrders } from "@/lib/orders";
@@ -53,7 +54,7 @@ export function HomeSlider() {
   const [paused, setPaused] = useState(false);
   const live = products
     .filter((product) => !product.storeHidden)
-    .map((product) => ({ ...product, ...describeStock(stock[product.id] ?? product.stock) }));
+    .map((product) => overlayCatalogStock(product, stock[product.id] ?? product.stock));
   const offers = rankedOffers(live);
 
   useEffect(() => {
@@ -310,7 +311,7 @@ export function FeaturedProducts({ onAddToCart }: { onAddToCart: (product: Catal
   const { stock } = useOrders();
   const live = products
     .filter((product) => !product.storeHidden)
-    .map((product) => ({ ...product, ...describeStock(stock[product.id] ?? product.stock) }));
+    .map((product) => overlayCatalogStock(product, stock[product.id] ?? product.stock));
   const featured = pickFeatured(live);
 
   return (

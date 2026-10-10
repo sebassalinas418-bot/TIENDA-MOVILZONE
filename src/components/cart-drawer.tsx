@@ -6,7 +6,9 @@ import { formatPrice } from "@/data/products";
 import { useCatalog } from "@/lib/offers";
 import { useCart } from "@/lib/cart";
 import { useOrders } from "@/lib/orders";
+import { PENDING_HOLD_LABEL } from "@/lib/web-pending-stock/availability";
 import { readSession } from "@/lib/session";
+import { reportIncomingWebOrder } from "@/services/taller-gestio/browser";
 
 type Delivery = "retiro" | "cadete";
 
@@ -14,9 +16,11 @@ export function CartDrawer() {
   const { config } = useStoreConfig();
   const { products } = useCatalog();
   const { lines, open, closeCart, setQuantity, removeItem, clearCart } = useCart();
-  const { placeOrder, stockOf } = useOrders();
+  const { placeOrder } = useOrders();
   const [delivery, setDelivery] = useState<Delivery>("retiro");
   const [placedId, setPlacedId] = useState<string | null>(null);
+  const [holdError, setHoldError] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const items = lines.flatMap((line) => {
     const product = products.find((item) => item.id === line.productId);
@@ -47,15 +51,37 @@ export function CartDrawer() {
       ? `Retiro sin cargo en ${address}.`
       : "Envío por cadete en la zona. El costo se confirma por este chat.";
 
-  function sendOrder() {
+  async function sendOrder() {
+    if (sending) return;
     const session = readSession();
+    if (items.some((item) => item.product.pendingHold || !item.product.inStock)) {
+      setHoldError(true);
+      return;
+    }
+    const orderId = `MZ-${Math.floor(100000 + Math.random() * 900000)}`;
+    const payload = items.map((item) => ({
+      productId: item.productId,
+      title: item.product.title,
+      quantity: item.quantity,
+      unitPrice: item.product.salePrice,
+    }));
+    setSending(true);
+    setHoldError(false);
+    const recorded = await reportIncomingWebOrder({
+      orderId,
+      customerName: session?.name,
+      customerEmail: session?.email,
+      notes: deliveryText,
+      items: payload,
+    });
+    if (!recorded.ok && recorded.reason === "reservado") {
+      setHoldError(true);
+      setSending(false);
+      return;
+    }
     const order = placeOrder({
-      items: items.map((item) => ({
-        productId: item.productId,
-        title: item.product.title,
-        quantity: item.quantity,
-        unitPrice: item.product.salePrice,
-      })),
+      id: orderId,
+      items: payload,
       total,
       delivery,
       deliveryText,
@@ -75,6 +101,7 @@ export function CartDrawer() {
     window.open(`https://wa.me/${config.whatsapp}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
     clearCart();
     setPlacedId(order.id);
+    setSending(false);
   }
 
   return (
@@ -146,7 +173,7 @@ export function CartDrawer() {
                       <button
                         type="button"
                         aria-label={`Sumar uno de ${item.product.title}`}
-                        disabled={item.quantity >= stockOf(item.productId)}
+                        disabled={item.quantity >= (item.product.sellableStock ?? item.product.stock)}
                         onClick={() => setQuantity(item.productId, item.quantity + 1)}
                         className="flex h-8 w-8 items-center justify-center rounded-full text-gray-700 enabled:hover:bg-gray-100 disabled:text-gray-300"
                       >
@@ -197,10 +224,16 @@ export function CartDrawer() {
                 <span className="text-sm text-gray-500">Total</span>
                 <span className="text-lg font-bold text-gray-900">{formatPrice(total)}</span>
               </div>
+              {holdError ? (
+                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {PENDING_HOLD_LABEL}. Esperá a que el local cancele o confirme el pedido anterior.
+                </p>
+              ) : null}
               <button
                 type="button"
-                onClick={sendOrder}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-sky-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-sky-400"
+                onClick={() => void sendOrder()}
+                disabled={sending}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-sky-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-sky-400 disabled:bg-gray-300"
               >
                 Enviar pedido por WhatsApp
               </button>

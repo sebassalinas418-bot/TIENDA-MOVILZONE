@@ -31,7 +31,7 @@ export function Catalog() {
       setLoginOpen(true);
       return;
     }
-    if (!product.inStock) return;
+    if (!product.inStock || product.pendingHold) return;
     addItem(product.id);
   }
 

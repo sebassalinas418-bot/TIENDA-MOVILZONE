@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCatalog } from "@/lib/offers";
 import { useOrders } from "@/lib/orders";
 import { readSession, SESSION_EVENT } from "@/lib/session";
 
@@ -47,6 +48,7 @@ function readStoredLines(key: string): CartLine[] {
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { stockOf } = useOrders();
+  const { products } = useCatalog();
   const [lines, setLines] = useState<CartLine[]>([]);
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
@@ -82,9 +84,35 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const count = useMemo(() => lines.reduce((sum, line) => sum + line.quantity, 0), [lines]);
 
+  function sellableOf(productId: string) {
+    const product = products.find((item) => item.id === productId);
+    if (product?.pendingHold) return 0;
+    if (typeof product?.sellableStock === "number") return product.sellableStock;
+    return stockOf(productId);
+  }
+
+  useEffect(() => {
+    setLines((current) => {
+      let changed = false;
+      const next = current.flatMap((line) => {
+        const max = sellableOf(line.productId);
+        if (max < 1) {
+          changed = true;
+          return [];
+        }
+        if (line.quantity > max) {
+          changed = true;
+          return [{ ...line, quantity: max }];
+        }
+        return [line];
+      });
+      return changed ? next : current;
+    });
+  }, [products]);
+
   function addItem(productId: string) {
     setLines((current) => {
-      const max = stockOf(productId);
+      const max = sellableOf(productId);
       const existing = current.find((line) => line.productId === productId);
       if (max < 1) return current;
       if (!existing) return [...current, { productId, quantity: 1 }];
@@ -96,7 +124,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }
 
   function setQuantity(productId: string, quantity: number) {
-    const max = stockOf(productId);
+    const max = sellableOf(productId);
     setLines((current) =>
       current.flatMap((line) => {
         if (line.productId !== productId) return [line];

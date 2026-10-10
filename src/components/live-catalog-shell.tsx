@@ -2,12 +2,12 @@ import { Suspense, type ReactNode } from "react";
 import { connection } from "next/server";
 import { CatalogProvider } from "@/lib/offers";
 import { readStoreOverlayHidden } from "@/services/store-overlay/server";
-import { readTallerCatalog } from "@/services/taller-gestio/server";
+import { readStorefrontCatalog } from "@/services/taller-gestio/storefront-catalog";
 
 async function LiveCatalogData({ children }: { children: ReactNode }) {
   await connection();
   const [initialRemote, overlayHidden] = await Promise.all([
-    readTallerCatalog().catch(() => null),
+    readStorefrontCatalog().catch(() => null),
     readStoreOverlayHidden().catch(() => []),
   ]);
   return (

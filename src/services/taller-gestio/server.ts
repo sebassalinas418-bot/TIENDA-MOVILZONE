@@ -4,6 +4,7 @@ import {
   defaultCategoryImage,
   slugTallerCategory,
 } from "@/services/taller-gestio/categories";
+import { ensureWebItemsAvailable } from "@/services/taller-gestio/pending-stock";
 
 const WEB_SALE = "web_sale";
 const WEB_ORIGIN = "Venta Web";
@@ -360,6 +361,9 @@ export async function recordIncomingWebOrder(input: {
     }
     return { ok: true as const };
   }
+
+  const available = await ensureWebItemsAvailable(input.items);
+  if (!available.ok) return { ok: false as const, reason: available.reason };
 
   const lines = input.items.map((item) => {
     const quantity = Math.floor(item.quantity);

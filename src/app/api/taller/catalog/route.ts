@@ -1,4 +1,5 @@
-import { readTallerCatalog, tallerConfigured } from "@/services/taller-gestio/server";
+import { tallerConfigured } from "@/services/taller-gestio/server";
+import { readStorefrontCatalog } from "@/services/taller-gestio/storefront-catalog";
 
 const noStore = {
   "Cache-Control": "private, no-store, no-cache, must-revalidate",
@@ -26,7 +27,7 @@ export async function GET() {
     return Response.json({ connected: false, products: [] }, { headers: noStore });
   }
   try {
-    const products = await withTimeout(readTallerCatalog(), 4000);
+    const products = await withTimeout(readStorefrontCatalog(), 4000);
     return Response.json(
       { connected: products !== null, products: products ?? [] },
       { headers: noStore },

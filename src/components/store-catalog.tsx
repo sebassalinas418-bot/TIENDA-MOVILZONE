@@ -9,7 +9,8 @@ import { SiteHeader } from "@/components/site-header";
 import { PageSkyFade } from "@/components/site-frame";
 import { SiteFooter } from "@/components/store-sections";
 import { useStoreConfig } from "@/config/store-config";
-import { brands, describeStock } from "@/data/products";
+import { brands } from "@/data/products";
+import { overlayCatalogStock } from "@/lib/web-pending-stock/availability";
 import { useCatalog, type CatalogProduct } from "@/lib/offers";
 import { storeVisibleCategory } from "@/lib/store-product-placements";
 import { useCart } from "@/lib/cart";
@@ -256,7 +257,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     const min = minPrice.trim() === "" ? null : Number(minPrice);
     const max = maxPrice.trim() === "" ? null : Number(maxPrice);
 
-    const live = products.map((product) => ({ ...product, ...describeStock(stock[product.id] ?? product.stock) }));
+    const live = products.map((product) => overlayCatalogStock(product, stock[product.id] ?? product.stock));
     const filtered = live.filter((product) => {
       const vis = storeVisibleCategory(
         product.id,
@@ -294,7 +295,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       const matchesMax = max === null || Number.isNaN(max) || product.salePrice <= max;
       const matchesBrand =
         selectedBrands.length === 0 || selectedBrands.includes(product.brand);
-      const matchesStock = showOutOfStock || product.inStock;
+      const matchesStock = showOutOfStock || product.inStock || Boolean(product.pendingHold);
       const matchesOffer = !onlyOffers || product.onSale;
       const matchesVisibility = admin || !product.storeHidden;
       return (
@@ -477,7 +478,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       router.push("/mi-cuenta");
       return;
     }
-    if (!product.inStock) return;
+    if (!product.inStock || product.pendingHold) return;
     if (!admin && product.storeHidden) return;
     addItem(product.id);
   }

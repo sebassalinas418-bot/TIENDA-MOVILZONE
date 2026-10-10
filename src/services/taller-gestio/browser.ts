@@ -51,15 +51,17 @@ export async function reportIncomingWebOrder(input: {
   notes?: string;
   createdAt?: string;
   items: { productId: string; title: string; quantity: number; unitPrice: number }[];
-}) {
+}): Promise<{ ok: boolean; reason?: string }> {
   try {
-    await fetch("/api/taller/web-order", {
+    const response = await fetch("/api/taller/web-order", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
+    const body = (await response.json()) as { ok?: boolean; reason?: string };
+    return { ok: Boolean(body.ok), reason: body.reason };
   } catch {
-    // El pedido local no se bloquea si TallerGestio no responde.
+    return { ok: false };
   }
 }
 

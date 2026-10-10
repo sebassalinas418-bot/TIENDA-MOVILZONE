@@ -36,6 +36,7 @@ export type StoreOrder = {
 };
 
 type PlaceOrderInput = {
+  id?: string;
   items: OrderItem[];
   total: number;
   delivery: DeliveryMode;
@@ -182,10 +183,15 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
   function placeOrder(input: PlaceOrderInput) {
     const order: StoreOrder = {
-      id: createOrderId(orders),
+      id: input.id ?? createOrderId(orders),
       createdAt: new Date().toISOString(),
       status: "pendiente",
-      ...input,
+      items: input.items,
+      total: input.total,
+      delivery: input.delivery,
+      deliveryText: input.deliveryText,
+      customerName: input.customerName,
+      customerEmail: input.customerEmail,
     };
     setOrders((current) => [order, ...current]);
     void reportIncomingWebOrder({
