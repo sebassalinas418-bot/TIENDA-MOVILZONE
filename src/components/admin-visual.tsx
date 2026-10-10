@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { useStoreConfig } from "@/config/store-config";
 import { brands, formatPrice } from "@/data/products";
 import { AdminImageTools } from "@/components/admin-image-tools";
-import { isolateProductFile } from "@/lib/admin-image-tools/isolate-product";
+import { isolateProductImage } from "@/lib/admin-image-tools/isolate-product";
 import { quotePrice, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
 
 type OfferDraft = {
@@ -377,6 +377,7 @@ function ImagePicker({
   searchQuery?: string;
 }) {
   const [reading, setReading] = useState(false);
+  const autoIsolate = Boolean(searchQuery);
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -387,9 +388,19 @@ function ImagePicker({
     setReading(true);
     onError("");
     try {
-      onChange(searchQuery ? await isolateProductFile(file) : await compressImage(file));
+      const compressed = await compressImage(file);
+      if (!autoIsolate) {
+        onChange(compressed);
+        return;
+      }
+      try {
+        onChange(await isolateProductImage(compressed));
+      } catch {
+        onChange(compressed);
+        onError("Se usó la foto original porque no se pudo quitar el fondo.");
+      }
     } catch {
-      onError(searchQuery ? "No se pudo quitar el fondo de esa imagen." : "No se pudo leer esa imagen.");
+      onError("No se pudo leer esa imagen.");
     } finally {
       setReading(false);
     }
@@ -402,8 +413,31 @@ function ImagePicker({
           {value ? <img src={value} alt="" className="h-full w-full object-contain" /> : null}
         </div>
       </div>
-      <label className="mt-3 flex cursor-pointer items-center justify-center rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400">
-        {reading ? (searchQuery ? "Quitando fondo..." : "Leyendo imagen...") : "Subir imagen"}
+      {autoIsolate ? (
+        <label className="mt-3 flex cursor-pointer items-center justify-center rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400">
+          {reading ? "Procesando foto..." : "Sacar foto y quitar fondo"}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="sr-only"
+            disabled={reading}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              void onFile(file);
+            }}
+          />
+        </label>
+      ) : null}
+      <label
+        className={`mt-3 flex cursor-pointer items-center justify-center rounded-full px-4 py-2.5 text-sm font-bold ${
+          autoIsolate
+            ? "border border-gray-200 bg-white text-gray-800 hover:bg-gray-50"
+            : "bg-sky-500 text-white hover:bg-sky-400"
+        }`}
+      >
+        {reading ? "Procesando foto..." : "Subir imagen"}
         <input
           type="file"
           accept="image/*"

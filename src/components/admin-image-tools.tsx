@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { isolateProductFile, isolateProductImage } from "@/lib/admin-image-tools/isolate-product";
+import { isolateProductImage } from "@/lib/admin-image-tools/isolate-product";
 
 type SearchHit = { url: string; thumb: string; title: string };
 
@@ -16,25 +16,8 @@ export function AdminImageTools({
   onChange: (value: string) => void;
   onError: (value: string) => void;
 }) {
-  const [busy, setBusy] = useState<"bg" | "search" | "camera" | null>(null);
+  const [busy, setBusy] = useState<"bg" | "search" | null>(null);
   const [hits, setHits] = useState<SearchHit[] | null>(null);
-
-  async function processFile(file: File | undefined) {
-    if (!file || busy) return;
-    if (!file.type.startsWith("image/")) {
-      onError("Elegí un archivo de imagen.");
-      return;
-    }
-    setBusy("camera");
-    onError("");
-    try {
-      onChange(await isolateProductFile(file));
-    } catch {
-      onError("No se pudo quitar el fondo de esa foto.");
-    } finally {
-      setBusy(null);
-    }
-  }
 
   async function removeBackground() {
     if (!value.trim() || busy) return;
@@ -77,21 +60,6 @@ export function AdminImageTools({
 
   return (
     <div className="mt-2">
-      <label className="mb-2 flex cursor-pointer items-center justify-center rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-500">
-        {busy === "camera" ? "Quitando fondo..." : "Sacar foto y quitar fondo"}
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="sr-only"
-          disabled={busy !== null}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            void processFile(file);
-          }}
-        />
-      </label>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button
           type="button"

@@ -1,12 +1,3 @@
-function fileToDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error("read"));
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.readAsDataURL(file);
-  });
-}
-
 function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
@@ -35,10 +26,6 @@ function similar(
   tolerance: number,
 ) {
   return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) <= tolerance;
-}
-
-export async function isolateProductFile(file: File) {
-  return isolateProductImage(await fileToDataUrl(file));
 }
 
 export async function isolateProductImage(src: string) {
@@ -90,7 +77,9 @@ export async function isolateProductImage(src: string) {
   let maxY = 0;
   for (let i = 0; i < mask.length; i += 1) {
     if (mask[i]) {
-      data[i * 4 + 3] = 0;
+      data[i * 4] = 255;
+      data[i * 4 + 1] = 255;
+      data[i * 4 + 2] = 255;
       continue;
     }
     const x = i % width;
@@ -102,7 +91,7 @@ export async function isolateProductImage(src: string) {
   }
 
   context.putImageData(imageData, 0, 0);
-  if (maxX <= minX || maxY <= minY) return canvas.toDataURL("image/png");
+  if (maxX <= minX || maxY <= minY) return canvas.toDataURL("image/jpeg", 0.88);
 
   const pad = 16;
   const sx = Math.max(0, minX - pad);
@@ -113,7 +102,9 @@ export async function isolateProductImage(src: string) {
   cropped.width = sw;
   cropped.height = sh;
   const crop = cropped.getContext("2d");
-  if (!crop) return canvas.toDataURL("image/png");
+  if (!crop) return canvas.toDataURL("image/jpeg", 0.88);
+  crop.fillStyle = "#ffffff";
+  crop.fillRect(0, 0, sw, sh);
   crop.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-  return cropped.toDataURL("image/png");
+  return cropped.toDataURL("image/jpeg", 0.88);
 }
