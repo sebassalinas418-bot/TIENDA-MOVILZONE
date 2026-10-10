@@ -3,6 +3,7 @@
 import { useState, type DragEvent } from "react";
 import { formatPrice } from "@/data/products";
 import type { CatalogProduct } from "@/lib/offers";
+import { isStoreSoldOut, SOLD_OUT_LABEL, soldOutStrikeClass } from "@/lib/store-sold-out/presentation";
 
 type ProductCardProps = {
   product: CatalogProduct;
@@ -25,6 +26,7 @@ export function ProductCard({
 }: ProductCardProps) {
   const [favorite, setFavorite] = useState(false);
   const hidden = Boolean(product.storeHidden);
+  const soldOut = isStoreSoldOut(product);
 
   return (
     <article
@@ -76,8 +78,11 @@ export function ProductCard({
           <span className="absolute inset-x-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-neutral-900/80 px-2 py-1 text-center text-xs font-bold tracking-wide text-white uppercase">
             Oculto
           </span>
-        ) : null}
-        {product.pendingHold ? (
+        ) : soldOut ? (
+          <span className="absolute top-2.5 left-2.5 z-10 rounded-lg bg-neutral-800 px-2.5 py-1 text-xs font-black tracking-tight text-white uppercase sm:text-sm">
+            {SOLD_OUT_LABEL}
+          </span>
+        ) : product.pendingHold ? (
           <span className="absolute inset-x-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-amber-600/90 px-2 py-1 text-center text-[10px] font-bold tracking-wide text-white uppercase sm:text-xs">
             Producto reservado / pendiente de pago
           </span>
@@ -102,7 +107,12 @@ export function ProductCard({
       </div>
 
       <p className="mt-2 pr-8 text-[11px] font-semibold text-neutral-800 sm:mt-3 sm:pr-12 sm:text-sm">{product.stockLabel}</p>
-      <h3 className={`mt-0.5 line-clamp-2 pr-2 text-[13px] leading-snug font-semibold text-neutral-950 sm:mt-1 sm:text-base ${hidden ? "line-through decoration-neutral-400" : ""}`}>
+      <h3
+        className={soldOutStrikeClass(
+          soldOut || hidden,
+          "mt-0.5 line-clamp-2 pr-2 text-[13px] leading-snug font-semibold text-neutral-950 sm:mt-1 sm:text-base",
+        )}
+      >
         {product.title}
       </h3>
       <div className="mt-1.5 max-w-[calc(100%-2.25rem)] sm:mt-2 sm:max-w-[calc(100%-3rem)]">
@@ -111,12 +121,20 @@ export function ProductCard({
             <button
               type="button"
               onClick={onEdit}
-              className={`text-left font-extrabold tracking-tight text-neutral-950 underline-offset-2 hover:text-sky-700 hover:underline ${product.onSale ? "text-base sm:text-xl" : "text-sm sm:text-lg"}`}
+              className={soldOutStrikeClass(
+                soldOut,
+                `text-left font-extrabold tracking-tight text-neutral-950 underline-offset-2 hover:text-sky-700 hover:underline ${product.onSale ? "text-base sm:text-xl" : "text-sm sm:text-lg"}`,
+              )}
             >
               {formatPrice(product.salePrice)}
             </button>
           ) : (
-            <p className={`font-extrabold tracking-tight text-neutral-950 ${product.onSale ? "text-base sm:text-xl" : "text-sm sm:text-lg"}`}>
+            <p
+              className={soldOutStrikeClass(
+                soldOut,
+                `font-extrabold tracking-tight text-neutral-950 ${product.onSale ? "text-base sm:text-xl" : "text-sm sm:text-lg"}`,
+              )}
+            >
               {formatPrice(product.salePrice)}
             </p>
           )}

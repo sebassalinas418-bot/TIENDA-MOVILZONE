@@ -11,6 +11,7 @@ import { SiteFooter } from "@/components/store-sections";
 import { useStoreConfig } from "@/config/store-config";
 import { brands } from "@/data/products";
 import { overlayCatalogStock } from "@/lib/web-pending-stock/availability";
+import { isStoreSoldOut } from "@/lib/store-sold-out/presentation";
 import { useCatalog, type CatalogProduct } from "@/lib/offers";
 import { storeVisibleCategory } from "@/lib/store-product-placements";
 import { useCart } from "@/lib/cart";
@@ -160,7 +161,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [showOutOfStock, setShowOutOfStock] = useState(false);
+  const [showOutOfStock, setShowOutOfStock] = useState(true);
   const [onlyOffers, setOnlyOffers] = useState(() => searchParams.get("vista") === "ofertas");
   const [sortKey, setSortKey] = useState<SortKey>("relevant");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -295,7 +296,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       const matchesMax = max === null || Number.isNaN(max) || product.salePrice <= max;
       const matchesBrand =
         selectedBrands.length === 0 || selectedBrands.includes(product.brand);
-      const matchesStock = showOutOfStock || product.inStock || Boolean(product.pendingHold);
+      const matchesStock = showOutOfStock || !isStoreSoldOut(product);
       const matchesOffer = !onlyOffers || product.onSale;
       const matchesVisibility = admin || !product.storeHidden;
       return (
