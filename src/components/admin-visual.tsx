@@ -77,6 +77,7 @@ export function ProductEditModal({
           onChange={setImage}
           onError={setImageError}
           autoIsolate
+          productId={product.id}
         />
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
@@ -374,12 +375,14 @@ function ImagePicker({
   onChange,
   onError,
   autoIsolate = false,
+  productId,
 }: {
   value: string;
   error: string;
   onChange: (value: string) => void;
   onError: (value: string) => void;
   autoIsolate?: boolean;
+  productId?: string;
 }) {
   const [reading, setReading] = useState(false);
 
@@ -393,20 +396,20 @@ function ImagePicker({
     onError("");
     try {
       if (!autoIsolate) {
-        onChange(await uploadStoreProductImage(file));
+        onChange(await uploadStoreProductImage(file, productId));
         return;
       }
       try {
         const isolated = await isolateProductFile(file);
         onChange(
           isolated.startsWith("data:")
-            ? await uploadStoreProductImageFromDataUrl(isolated)
+            ? await uploadStoreProductImageFromDataUrl(isolated, productId)
             : isolated.startsWith("http")
               ? isolated
-              : await uploadStoreProductImage(file),
+              : await uploadStoreProductImage(file, productId),
         );
       } catch {
-        onChange(await uploadStoreProductImage(await prepareProductImageFile(file)));
+        onChange(await uploadStoreProductImage(await prepareProductImageFile(file), productId));
         onError("Se usó la foto original porque no se pudo quitar el fondo.");
       }
     } catch (err) {

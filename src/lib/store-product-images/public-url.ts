@@ -12,8 +12,20 @@ export function isPersistableProductImage(value?: string | null) {
   }
 }
 
+export function isSharedProductImage(value?: string | null) {
+  const src = value?.trim() ?? "";
+  if (!isPersistableProductImage(src)) return false;
+  if (src.startsWith("/")) return false;
+  if (/\/categories\//i.test(src) || /placeholder/i.test(src)) return false;
+  return /^https?:\/\//i.test(src);
+}
+
+/** La foto de la base gana: así celular y escritorio ven lo mismo. */
 export function pickCatalogImage(overlay?: string, remote?: string) {
-  if (isPersistableProductImage(overlay)) return overlay!.trim();
-  if (isPersistableProductImage(remote)) return remote!.trim();
-  return (remote || overlay || "").trim();
+  const r = remote?.trim() ?? "";
+  const o = overlay?.trim() ?? "";
+  if (isSharedProductImage(r)) return r;
+  if (isSharedProductImage(o)) return o;
+  if (isPersistableProductImage(r)) return r;
+  return o || r;
 }

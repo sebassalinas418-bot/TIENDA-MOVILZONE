@@ -5,6 +5,7 @@ import { describeStock, products as baseProducts, type Product } from "@/data/pr
 import { useStoreConfig } from "@/config/store-config";
 import { useOrders } from "@/lib/orders";
 import { fetchTallerCatalog, pushTallerProduct } from "@/services/taller-gestio/browser";
+import { persistStoreProductImage } from "@/lib/store-product-images/client-upload";
 import { isPersistableProductImage, pickCatalogImage } from "@/lib/store-product-images/public-url";
 import {
   categorySignature,
@@ -482,6 +483,7 @@ export function CatalogProvider({
     const offerChanged = Boolean(patch.offer);
     const persistImage = isPersistableProductImage(patch.image) ? patch.image!.trim() : "";
     if (!priceChanged && !stockChanged && !offerChanged && !persistImage) return;
+    if (persistImage) void persistStoreProductImage(productId, persistImage);
     const originalImage =
       (remote ?? []).find((item) => item.id === productId)?.image ??
       extras.find((item) => item.id === productId)?.image ??
