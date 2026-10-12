@@ -54,6 +54,7 @@ export async function POST(request: Request) {
       products?: SocialProductSnap[];
       random?: boolean;
       engine?: SocialAiEngine;
+      templateId?: string;
       id?: string;
       schedule?: Partial<SocialSchedule>;
     };
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
       products: body.products,
       random: body.random,
       engine: normalizeSocialAiEngine(body.engine),
+      templateId: body.templateId,
     });
     return Response.json({ ...result, status: socialMarketingStatus() }, { status: result.ok ? 201 : 400 });
   } catch (err) {

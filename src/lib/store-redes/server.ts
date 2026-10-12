@@ -5,7 +5,8 @@ import { socialOpenAiKey } from "@/lib/store-redes/gemini-key";
 import { metaInstagramConfigured, publishToInstagram } from "@/lib/store-redes/meta-instagram";
 import { pickSocialProduct } from "@/lib/store-redes/pick-product";
 import { pickImageFromRow, preferRealProductImage } from "@/lib/store-redes/product-image";
-import { clampHour, socialScheduleDue } from "@/lib/store-redes/schedule";
+import { clampHour, normalizeScheduleHours, socialScheduleMatch } from "@/lib/store-redes/schedule";
+import { normalizeTemplateMode, pickNextTemplate } from "@/lib/store-redes/templates";
 import {
   defaultSocialSchedule,
   type SocialAiEngine,
@@ -61,16 +62,36 @@ export async function readSocialSchedule(shopId: string) {
   if (!client) return { ok: true as const, schedule: defaultSocialSchedule() };
   const { data, error } = await client.from(SCHEDULE).select("payload").eq("shop_id", shopId).maybeSingle();
   if (error || !data?.payload) return { ok: true as const, schedule: defaultSocialSchedule() };
-  return { ok: true as const, schedule: { ...defaultSocialSchedule(), ...(data.payload as SocialSchedule) } };
+  const payload = data.payload as SocialSchedule;
+  const hours = normalizeScheduleHours(payload.hours, payload.hour);
+  return {
+    ok: true as const,
+    schedule: {
+      ...defaultSocialSchedule(),
+      ...payload,
+      hours,
+      hour: clampHour(Number.parseInt(hours[0]?.slice(0, 2) || "11", 10)),
+      templateMode: normalizeTemplateMode(payload.templateMode),
+      templateId: payload.templateId || defaultSocialSchedule().templateId,
+      lastTemplateIndex: Number.isFinite(payload.lastTemplateIndex) ? payload.lastTemplateIndex : -1,
+    },
+  };
 }
 
 export async function saveSocialSchedule(shopId: string, patch: Partial<SocialSchedule>) {
   const current = await readSocialSchedule(shopId);
+  const hours = normalizeScheduleHours(patch.hours ?? current.schedule.hours, patch.hour ?? current.schedule.hour);
+  const hour = clampHour(Number.parseInt(hours[0]?.slice(0, 2) || "11", 10));
   const schedule: SocialSchedule = {
     ...current.schedule,
     ...patch,
-    hour: clampHour(patch.hour ?? current.schedule.hour),
+    hours,
+    hour,
+    lastRunBySlot: patch.lastRunBySlot ?? current.schedule.lastRunBySlot ?? {},
     productPool: patch.productPool ?? current.schedule.productPool,
+    templateMode: normalizeTemplateMode(patch.templateMode ?? current.schedule.templateMode),
+    templateId: patch.templateId ?? current.schedule.templateId,
+    lastTemplateIndex: patch.lastTemplateIndex ?? current.schedule.lastTemplateIndex ?? -1,
   };
   const client = socialDb();
   if (!client) return { ok: false as const, error: "Sin conexión para guardar la programación.", schedule };
@@ -90,11 +111,17 @@ export async function generateSocialPost(
     products?: SocialProductSnap[];
     random?: boolean;
     engine?: SocialAiEngine;
+    templateId?: string;
   },
 ) {
   const pool = input.products ?? (input.product ? [input.product] : []);
   const picked = input.random || !input.product ? pickSocialProduct(pool, input.product?.id) : input.product;
   if (!picked) return { ok: false as const, error: "No hay productos para armar el post." };
+  const { schedule } = await readSocialSchedule(shopId);
+  const template = pickNextTemplate({
+    ...schedule,
+    templateId: input.templateId || schedule.templateId,
+  });
   const product = await hydrateSocialProductPhoto(shopId, picked);
   const copy = await draftInstagramCopy(product, normalizeSocialAiEngine(input.engine));
   const post: SocialPost = {
@@ -109,8 +136,10 @@ export async function generateSocialPost(
     hashtags: copy.hashtags,
     features: copy.features,
     provider: copy.provider,
+    templateId: template.templateId,
   };
   const stored = await persistPost(shopId, post);
+  await saveSocialSchedule(shopId, { lastTemplateIndex: template.lastTemplateIndex });
   const hint = [copy.hint, stored.ok ? "" : stored.error].filter(Boolean).join(" ");
   if (!stored.ok) return { ok: true as const, post, warning: hint || stored.error };
   return { ok: true as const, post: stored.post, warning: hint || undefined };
@@ -157,7 +186,8 @@ export async function publishSocialPost(shopId: string, id: string) {
 
 export async function runDueSocialPosts(shopId: string) {
   const { schedule } = await readSocialSchedule(shopId);
-  if (!socialScheduleDue(schedule)) {
+  const slot = socialScheduleMatch(schedule);
+  if (!slot) {
     return { ok: true as const, ran: false as const, reason: "Todavía no toca publicar." };
   }
   const generated = await generateSocialPost(shopId, {
@@ -166,7 +196,11 @@ export async function runDueSocialPosts(shopId: string) {
     engine: normalizeSocialAiEngine(schedule.engine),
   });
   if (!generated.ok) return generated;
-  await saveSocialSchedule(shopId, { lastRunAt: new Date().toISOString() });
+  const ranAt = new Date().toISOString();
+  await saveSocialSchedule(shopId, {
+    lastRunAt: ranAt,
+    lastRunBySlot: { ...(schedule.lastRunBySlot ?? {}), [slot]: ranAt },
+  });
   const published = await publishSocialPost(shopId, generated.post.id);
   return { ok: true as const, ran: true as const, post: published.post ?? generated.post, publish: published };
 }

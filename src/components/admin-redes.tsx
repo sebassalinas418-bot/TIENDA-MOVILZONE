@@ -10,6 +10,14 @@ import {
 } from "@/components/store-redes/instagram-product-card";
 import { featuresFromPost } from "@/lib/store-redes/features";
 import { preferRealProductImage } from "@/lib/store-redes/product-image";
+import { normalizeScheduleHours, scheduleHours } from "@/lib/store-redes/schedule";
+import {
+  CUSTOM_TEMPLATE_ID,
+  DEFAULT_TEMPLATE_ID,
+  OFFICIAL_REDES_TEMPLATES,
+  templateLayout,
+  templateSrc,
+} from "@/lib/store-redes/templates";
 import {
   defaultSocialSchedule,
   type SocialAiEngine,
@@ -17,12 +25,18 @@ import {
   type SocialPost,
   type SocialProductSnap,
   type SocialSchedule,
+  type SocialTemplateMode,
 } from "@/lib/store-redes/types";
 
 const LOCAL_POSTS = "movilzone.store-redes.posts";
 const LOCAL_SCHEDULE = "movilzone.store-redes.schedule";
 const LOCAL_TEMPLATE = "movilzone.store-redes.template";
 const LOCAL_ENGINE = "movilzone.store-redes.engine";
+const TEMPLATE_MODES: { id: SocialTemplateMode; label: string }[] = [
+  { id: "fixed", label: "Fija" },
+  { id: "random", label: "Aleatoria (Random)" },
+  { id: "sequential", label: "Por orden (Secuencial)" },
+];
 const CLIENT_GEMINI_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY?.trim() || "";
 const CLIENT_OPENAI_KEY = process.env.NEXT_PUBLIC_OPENAI_API_KEY?.trim() || "";
 
@@ -62,7 +76,7 @@ export function AdminRedes() {
   const [openaiOn, setOpenaiOn] = useState(Boolean(CLIENT_OPENAI_KEY));
   const [igOn, setIgOn] = useState(false);
   const [engine, setEngine] = useState<SocialAiEngine>("gemini");
-  const [templateSrc, setTemplateSrc] = useState("");
+  const [customTemplate, setCustomTemplate] = useState("");
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,7 +84,7 @@ export function AdminRedes() {
     setSchedule(readLocalSchedule());
     try {
       const saved = localStorage.getItem(LOCAL_TEMPLATE);
-      if (saved) setTemplateSrc(saved);
+      if (saved) setCustomTemplate(saved);
       const savedEngine = localStorage.getItem(LOCAL_ENGINE);
       if (savedEngine === "openai" || savedEngine === "gemini") setEngine(savedEngine);
     } catch {
@@ -102,6 +116,13 @@ export function AdminRedes() {
   const preview = posts[0];
   const selected = pool.find((item) => item.id === selectedId) ?? null;
   const handle = config.instagram || "movilzone.gp";
+  const templateMode = schedule.templateMode || "sequential";
+  const activeTemplateId =
+    templateMode === "fixed"
+      ? schedule.templateId || DEFAULT_TEMPLATE_ID
+      : preview?.templateId || schedule.templateId || DEFAULT_TEMPLATE_ID;
+  const previewTemplateSrc = templateSrc(activeTemplateId, customTemplate);
+  const previewLayout = templateLayout(activeTemplateId);
 
   async function downloadCard() {
     if (!cardRef.current || !preview) return;
@@ -134,6 +155,7 @@ export function AdminRedes() {
           product: selected ?? undefined,
           products: pool,
           engine,
+          templateId: templateMode === "fixed" ? activeTemplateId : undefined,
         }),
       });
       const body = (await response.json()) as {
@@ -274,18 +296,60 @@ export function AdminRedes() {
             </button>
           ))}
         </div>
-        <label className="mt-4 block text-sm font-medium">
-          Hora (Argentina)
-          <input
-            type="number"
-            min={0}
-            max={23}
-            value={schedule.hour}
-            onChange={(event) => setSchedule((current) => ({ ...current, hour: Number(event.target.value) }))}
-            onBlur={() => void saveSchedule({ ...schedule, productPool: pool })}
-            className="mt-1 h-11 w-28 rounded-xl border border-gray-200 px-3 outline-none focus:border-sky-500"
-          />
-        </label>
+        <div className="mt-4">
+          <p className="text-sm font-medium text-neutral-900">Horarios (Argentina)</p>
+          <p className="mt-1 text-xs text-gray-500">Hasta 5. Ej: 10:00, 14:30 y 20:00.</p>
+          <ul className="mt-3 space-y-2">
+            {scheduleHours(schedule).map((slot, index) => (
+              <li key={`${slot}-${index}`} className="flex items-center gap-2">
+                <input
+                  type="time"
+                  value={slot}
+                  onChange={(event) => {
+                    const next = [...scheduleHours(schedule)];
+                    next[index] = event.target.value || slot;
+                    void saveSchedule({ ...schedule, hours: next, productPool: pool });
+                  }}
+                  className="h-11 w-36 rounded-xl border border-gray-200 px-3 outline-none focus:border-cyan-500"
+                />
+                {scheduleHours(schedule).length > 1 ? (
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-rose-600"
+                    onClick={() => {
+                      const next = scheduleHours(schedule).filter((_, itemIndex) => itemIndex !== index);
+                      void saveSchedule({ ...schedule, hours: normalizeScheduleHours(next), productPool: pool });
+                    }}
+                  >
+                    Quitar
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {scheduleHours(schedule).length < 5 ? (
+            <button
+              type="button"
+              className="mt-3 rounded-full bg-neutral-950 px-4 py-2 text-sm font-bold text-white hover:bg-neutral-800"
+              onClick={() => {
+                const current = scheduleHours(schedule);
+                const nextHour = Math.min(23, ((Number.parseInt(current.at(-1)?.slice(0, 2) || "11", 10) + 4) % 24));
+                void saveSchedule({
+                  ...schedule,
+                  hours: normalizeScheduleHours([...current, `${String(nextHour).padStart(2, "0")}:00`]),
+                  productPool: pool,
+                });
+              }}
+            >
+              + Agregar horario
+            </button>
+          ) : (
+            <p className="mt-2 text-xs text-gray-500">Máximo 5 horarios.</p>
+          )}
+          <p className="mt-3 text-xs text-gray-500">
+            Con la automatización activa, cada horario usa el modo de plantillas (fija, random o secuencial).
+          </p>
+        </div>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_min(100%,34rem)]">
@@ -359,47 +423,124 @@ export function AdminRedes() {
         </div>
         {preview ? (
           <div className="space-y-3">
-            <label className="block rounded-2xl border border-dashed border-gray-200 bg-white p-3 text-sm">
-              <span className="font-semibold text-neutral-950">Plantilla 1080×1080 (JPG/PNG)</span>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="mt-2 block w-full text-xs"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    const value = String(reader.result || "");
-                    setTemplateSrc(value);
-                    try {
-                      if (value.length < 700000) localStorage.setItem(LOCAL_TEMPLATE, value);
-                    } catch {
-                      setError("La plantilla es muy pesada para guardar acá. Usala igual en esta sesión.");
+            <div className="rounded-2xl border border-gray-200 bg-white p-3 text-sm">
+              <p className="font-semibold text-neutral-950">Plantillas predeterminadas</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {TEMPLATE_MODES.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() =>
+                      void saveSchedule({
+                        ...schedule,
+                        templateMode: item.id,
+                        templateId: item.id === "fixed" ? schedule.templateId || DEFAULT_TEMPLATE_ID : schedule.templateId,
+                        productPool: pool,
+                      })
                     }
-                  };
-                  reader.readAsDataURL(file);
-                }}
-              />
-              {templateSrc ? (
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                      templateMode === item.id ? "bg-cyan-500 text-black" : "bg-neutral-950 text-white hover:bg-neutral-800"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {OFFICIAL_REDES_TEMPLATES.map((item) => {
+                  const selectedTemplate = activeTemplateId === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      title={item.hint}
+                      onClick={() =>
+                        void saveSchedule({
+                          ...schedule,
+                          templateMode: "fixed",
+                          templateId: item.id,
+                          lastTemplateIndex: OFFICIAL_REDES_TEMPLATES.findIndex((entry) => entry.id === item.id),
+                          productPool: pool,
+                        })
+                      }
+                      className={`overflow-hidden rounded-xl border-2 ${
+                        selectedTemplate ? "border-cyan-400" : "border-transparent"
+                      }`}
+                    >
+                      <span
+                        className={`block aspect-square w-full ${
+                          item.layout.kind === "studio"
+                            ? "bg-[#05070c]"
+                            : item.layout.kind === "frame"
+                              ? "bg-[linear-gradient(135deg,#070b12_55%,#22d3ee_100%)]"
+                              : "bg-[linear-gradient(215deg,#22d3ee_0%,#070b12_42%)]"
+                        }`}
+                      />
+                      <span className="block truncate bg-neutral-950 px-1 py-1 text-center text-[10px] font-bold text-white">
+                        {item.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <label className="mt-3 block text-xs font-semibold text-neutral-800">
+                Subir plantilla propia (opcional)
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="mt-2 block w-full text-xs"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const value = String(reader.result || "");
+                      setCustomTemplate(value);
+                      try {
+                        if (value.length < 700000) localStorage.setItem(LOCAL_TEMPLATE, value);
+                      } catch {
+                        setError("La plantilla es muy pesada para guardar acá. Usala igual en esta sesión.");
+                      }
+                      void saveSchedule({
+                        ...schedule,
+                        templateMode: "fixed",
+                        templateId: CUSTOM_TEMPLATE_ID,
+                        productPool: pool,
+                      });
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
+              {schedule.templateId === CUSTOM_TEMPLATE_ID ? (
                 <button
                   type="button"
                   className="mt-2 text-xs font-semibold text-sky-700"
                   onClick={() => {
-                    setTemplateSrc("");
+                    setCustomTemplate("");
                     localStorage.removeItem(LOCAL_TEMPLATE);
+                    void saveSchedule({
+                      ...schedule,
+                      templateMode: "fixed",
+                      templateId: DEFAULT_TEMPLATE_ID,
+                      productPool: pool,
+                    });
                   }}
                 >
-                  Quitar plantilla
+                  Volver a plantillas MZ
                 </button>
               ) : (
-                <p className="mt-2 text-xs text-gray-500">Subí el marco. Encima van la foto, el precio y 3 características.</p>
+                <p className="mt-2 text-[11px] text-gray-500">
+                  Fija usa la elegida. Random y secuencial rotan las 3 oficiales en cada post y en cada horario automático.
+                </p>
               )}
-            </label>
+            </div>
             <div className="overflow-x-auto rounded-[1.5rem] border border-black/10 bg-slate-100 p-2">
               <InstagramProductCard
                 ref={cardRef}
-                templateSrc={templateSrc}
+                templateSrc={previewTemplateSrc}
+                templateId={activeTemplateId}
+                layout={previewLayout}
                 title={preview.product.title}
                 headline={preview.headline}
                 priceLabel={formatPrice(preview.product.price)}
