@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { SiteFrame } from "@/components/site-frame";
 import { useStoreConfig } from "@/config/store-config";
+import { StoreAuthContactFields } from "@/components/store-auth-contact-fields";
 import { authenticateStoreUser, registerStoreUser, resendStoreVerification } from "@/lib/store-auth-client";
+import { looksLikeEmail } from "@/lib/store-phone-auth/phone";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +15,8 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -28,12 +32,19 @@ export default function LoginPage() {
     if (mode === "register") {
       setBusy(true);
       try {
-        const body = await registerStoreUser(name, email, password);
+        const body = await registerStoreUser(name, email, password, phone);
         if (!body.ok) {
           setError(body.error || "No se pudo crear la cuenta.");
           return;
         }
+        if (body.phoneOnly) {
+          setIdentifier(phone.trim());
+          setNotice("Cuenta lista. Ya podés entrar con tu celular y contraseña.");
+          setMode("login");
+          return;
+        }
         setPendingEmail(email.trim().toLowerCase());
+        setIdentifier(email.trim());
         setNotice(
           body.mailed
             ? "Te enviamos un enlace a tu correo. Confirmalo para activar la cuenta."
@@ -51,7 +62,7 @@ export default function LoginPage() {
 
     setBusy(true);
     try {
-      const result = await authenticateStoreUser(email, password);
+      const result = await authenticateStoreUser(identifier, password);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -65,8 +76,8 @@ export default function LoginPage() {
   }
 
   async function resend() {
-    const target = pendingEmail || email.trim().toLowerCase();
-    if (!target) {
+    const target = pendingEmail || (looksLikeEmail(identifier) ? identifier.trim().toLowerCase() : email.trim().toLowerCase());
+    if (!target || !looksLikeEmail(target)) {
       setError("Ingresá el correo para reenviar el enlace.");
       return;
     }
@@ -100,7 +111,7 @@ export default function LoginPage() {
           </h1>
           {mode === "register" ? (
             <p className="mt-2 text-sm leading-6 text-gray-500">
-              Te vamos a mandar un enlace para confirmar el correo. Hasta entonces la cuenta no puede operar.
+              Podés crear la cuenta con correo, con celular, o con ambos. Si usás correo, te mandamos un enlace para confirmarlo.
             </p>
           ) : null}
           <div className="mt-4 flex gap-2">
@@ -126,46 +137,23 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {mode === "register" ? (
-            <label className="mt-5 block text-sm font-medium">
-              Nombre
-              <input
-                type="text"
-                name="name"
-                autoComplete="name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                className="mt-1.5 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
-              />
-            </label>
-          ) : null}
-
-          <label className={`block text-sm font-medium ${mode === "register" ? "mt-4" : "mt-5"}`}>
-            Correo
-            <input
-              type="email"
-              name="email"
-              autoComplete="username"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              className="mt-1.5 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
+          <div className="mt-5 space-y-4">
+            <StoreAuthContactFields
+              mode={mode}
+              name={name}
+              onName={setName}
+              identifier={identifier}
+              onIdentifier={setIdentifier}
+              email={email}
+              onEmail={setEmail}
+              phone={phone}
+              onPhone={setPhone}
+              password={password}
+              onPassword={setPassword}
+              labelClassName="block text-sm font-medium"
+              inputClassName="mt-1.5 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
             />
-          </label>
-
-          <label className="mt-4 block text-sm font-medium">
-            Contraseña
-            <input
-              type="password"
-              name="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              className="mt-1.5 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
-            />
-          </label>
+          </div>
 
           {notice ? <p className="mt-3 text-sm text-emerald-700">{notice}</p> : null}
           {devLink ? (

@@ -1,9 +1,8 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SiteFrame } from "@/components/site-frame";
-import { formatPrice } from "@/data/products";
 import {
   isSessionVerified,
   openCustomerSession,
@@ -12,6 +11,8 @@ import {
   type DemoSession,
 } from "@/lib/session";
 import type { StoreCustomerOrder, StoreCustomerPublic } from "@/services/store-customers/types";
+import { AccountOrderList } from "@/components/account-order-list";
+import { isPhonePlaceholderEmail } from "@/lib/store-phone-auth/phone";
 import {
   ACCOUNT_SIDEBAR_NAV,
   isAccountSidebarSection,
@@ -181,7 +182,7 @@ export function AccountPanel() {
           </aside>
 
           <section>
-            {!verified ? (
+            {!verified && session && !isPhonePlaceholderEmail(session.email) ? (
               <div className="mb-5 flex flex-col gap-2 rounded-xl bg-sky-600 px-4 py-3 text-sm text-white sm:flex-row sm:items-center sm:justify-between">
                 <p>Confirmá tu dirección de correo electrónico para comprobar si hay pedidos anteriores.</p>
                 <button type="button" onClick={() => void confirmEmail()} className="shrink-0 font-bold underline">
@@ -205,7 +206,12 @@ export function AccountPanel() {
                 <p className="text-sm leading-6 text-gray-600">
                   Hola {displayName}. Desde acá ves tus pedidos, datos y dirección de la tienda.
                 </p>
-                <OrdersTable orders={orders.slice(0, 3)} openOrder={openOrder} onOpen={setOpenOrder} />
+                <AccountOrderList
+                  orders={orders.slice(0, 3)}
+                  openOrder={openOrder}
+                  onOpen={setOpenOrder}
+                  formatWhen={formatWhen}
+                />
                 {orders.length > 3 ? (
                   <button type="button" onClick={() => setSection("pedidos")} className="mt-4 text-sm font-semibold text-sky-700">
                     Ver todos los pedidos
@@ -215,7 +221,12 @@ export function AccountPanel() {
             ) : null}
 
             {section === "pedidos" ? (
-              <OrdersTable orders={orders} openOrder={openOrder} onOpen={setOpenOrder} />
+              <AccountOrderList
+                orders={orders}
+                openOrder={openOrder}
+                onOpen={setOpenOrder}
+                formatWhen={formatWhen}
+              />
             ) : null}
 
             {section === "cuenta" ? (
@@ -236,7 +247,11 @@ export function AccountPanel() {
                 </label>
                 <label className="block text-sm font-medium">
                   Correo
-                  <input value={session.email} readOnly className="mt-1 h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-gray-600" />
+                  <input
+                    value={isPhonePlaceholderEmail(session.email) ? "Cuenta con celular" : session.email}
+                    readOnly
+                    className="mt-1 h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-gray-600"
+                  />
                 </label>
                 <button type="submit" disabled={saving} className="rounded-full bg-neutral-950 px-5 py-2.5 text-sm font-bold text-white hover:bg-neutral-800 disabled:opacity-50">
                   {saving ? "Guardando..." : "Guardar cambios"}
@@ -280,75 +295,5 @@ export function AccountPanel() {
         </div>
       </main>
     </SiteFrame>
-  );
-}
-
-function OrdersTable({
-  orders,
-  openOrder,
-  onOpen,
-}: {
-  orders: StoreCustomerOrder[];
-  openOrder: string | null;
-  onOpen: (id: string | null) => void;
-}) {
-  if (!orders.length) {
-    return (
-      <p className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
-        Todavía no hay pedidos con este correo.
-      </p>
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
-      <table className="min-w-full text-left text-sm">
-        <thead className="border-b border-gray-100 text-[11px] font-bold tracking-wide text-gray-500 uppercase">
-          <tr>
-            <th className="px-4 py-3">Pedido</th>
-            <th className="px-4 py-3">Fecha</th>
-            <th className="px-4 py-3">Estado</th>
-            <th className="px-4 py-3">Total</th>
-            <th className="px-4 py-3 text-right">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => (
-            <Fragment key={order.id}>
-              <tr className="border-b border-gray-50">
-                <td className="px-4 py-3 font-semibold text-neutral-950">#{order.id.replace(/^MZ-/, "")}</td>
-                <td className="px-4 py-3 text-gray-600">{formatWhen(order.createdAt)}</td>
-                <td className="px-4 py-3 uppercase tracking-wide text-gray-700">{order.statusLabel}</td>
-                <td className="px-4 py-3 text-gray-800">
-                  {formatPrice(order.total)} para {order.itemCount} artículo{order.itemCount === 1 ? "" : "s"}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => onOpen(openOrder === order.id ? null : order.id)}
-                    className="rounded-md bg-neutral-950 px-3 py-1.5 text-xs font-bold text-white"
-                  >
-                    Ver
-                  </button>
-                </td>
-              </tr>
-              {openOrder === order.id ? (
-                <tr key={`${order.id}-detail`}>
-                  <td colSpan={5} className="bg-gray-50 px-4 py-3">
-                    <ul className="space-y-1 text-sm text-gray-700">
-                      {order.items.map((item, index) => (
-                        <li key={`${order.id}-${index}`}>
-                          {item.name} × {item.quantity} — {formatPrice(item.lineTotal)}
-                        </li>
-                      ))}
-                    </ul>
-                  </td>
-                </tr>
-              ) : null}
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }

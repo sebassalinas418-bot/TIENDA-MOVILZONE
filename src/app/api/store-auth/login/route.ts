@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { applyStoreSessionCookie } from "@/lib/store-session-cookie";
-import { loginStoreCustomer } from "@/services/store-customers/server";
+import { loginStoreCustomerFlexible } from "@/services/store-customers/server";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { email?: string; password?: string };
+  const body = (await request.json()) as { email?: string; phone?: string; identifier?: string; password?: string };
   try {
-    const result = await loginStoreCustomer(body.email ?? "", body.password ?? "");
+    const identifier = (body.identifier || body.email || body.phone || "").trim();
+    const result = await loginStoreCustomerFlexible(identifier, body.password ?? "");
     if (!result.ok || !result.customer) {
       return NextResponse.json(result, { status: 401 });
     }

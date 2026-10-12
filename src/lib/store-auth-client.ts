@@ -61,16 +61,23 @@ export async function authenticateStoreUser(
   return { ok: true, session, verified: true };
 }
 
-export async function registerStoreUser(name: string, email: string, password: string) {
+export async function registerStoreUser(
+  name: string,
+  email: string,
+  password: string,
+  phone = "",
+) {
   const response = await fetch("/api/store-auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name, email, password, phone }),
   });
   return (await response.json()) as {
     ok?: boolean;
     error?: string;
     mailed?: boolean;
+    phoneOnly?: boolean;
+    pending?: boolean;
     devVerifyUrl?: string;
   };
 }

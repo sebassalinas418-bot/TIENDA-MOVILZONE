@@ -9,11 +9,13 @@ import {
   isStoreOwnerEmail,
   type DemoSession,
 } from "@/lib/session";
+import { StoreAuthContactFields } from "@/components/store-auth-contact-fields";
 import {
   authenticateStoreUser,
   registerStoreUser,
   resendStoreVerification,
 } from "@/lib/store-auth-client";
+import { looksLikeEmail } from "@/lib/store-phone-auth/phone";
 
 type AccountMenuProps = {
   session: DemoSession | null;
@@ -32,6 +34,8 @@ export function AccountMenu({ session, onLogout }: AccountMenuProps) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -73,9 +77,15 @@ export function AccountMenu({ session, onLogout }: AccountMenuProps) {
     setBusy(true);
     try {
       if (mode === "register") {
-        const body = await registerStoreUser(name, email, password);
+        const body = await registerStoreUser(name, email, password, phone);
         if (!body.ok) {
           setError(body.error || "No se pudo crear la cuenta.");
+          return;
+        }
+        if (body.phoneOnly) {
+          setIdentifier(phone.trim());
+          setNotice("Cuenta lista. Ya podés entrar con tu celular y contraseña.");
+          setMode("login");
           return;
         }
         setNotice(
@@ -84,10 +94,11 @@ export function AccountMenu({ session, onLogout }: AccountMenuProps) {
             : "Cuenta creada. Confirmá el correo con el enlace.",
         );
         if (body.devVerifyUrl) setDevLink(body.devVerifyUrl);
+        setIdentifier(email.trim());
         setMode("login");
         return;
       }
-      const result = await authenticateStoreUser(email, password, remember);
+      const result = await authenticateStoreUser(identifier, password, remember);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -102,8 +113,8 @@ export function AccountMenu({ session, onLogout }: AccountMenuProps) {
   }
 
   async function handleRecover() {
-    const target = email.trim().toLowerCase();
-    if (!target) {
+    const target = looksLikeEmail(identifier) ? identifier.trim().toLowerCase() : email.trim().toLowerCase();
+    if (!target || !looksLikeEmail(target)) {
       setError("Ingresá tu correo para ayudarte a recuperar el acceso.");
       return;
     }
@@ -236,45 +247,23 @@ export function AccountMenu({ session, onLogout }: AccountMenuProps) {
                 </button>
               </div>
 
-              {mode === "register" ? (
-                <label className="mt-4 block text-xs font-bold tracking-wide text-slate-500 uppercase">
-                  Nombre
-                  <input
-                    type="text"
-                    name="name"
-                    autoComplete="name"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    required
-                    className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-neutral-900 outline-none focus:border-sky-400 focus:bg-white"
-                  />
-                </label>
-              ) : null}
-
-              <label className="mt-3 block text-xs font-bold tracking-wide text-slate-500 uppercase">
-                Correo / usuario
-                <input
-                  type="email"
-                  name="email"
-                  autoComplete="username"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                  className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-neutral-900 outline-none focus:border-sky-400 focus:bg-white"
+              <div className="mt-4 space-y-3">
+                <StoreAuthContactFields
+                  mode={mode}
+                  name={name}
+                  onName={setName}
+                  identifier={identifier}
+                  onIdentifier={setIdentifier}
+                  email={email}
+                  onEmail={setEmail}
+                  phone={phone}
+                  onPhone={setPhone}
+                  password={password}
+                  onPassword={setPassword}
+                  labelClassName="block text-xs font-bold tracking-wide text-slate-500 uppercase"
+                  inputClassName="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-neutral-900 outline-none focus:border-sky-400 focus:bg-white"
                 />
-              </label>
-              <label className="mt-3 block text-xs font-bold tracking-wide text-slate-500 uppercase">
-                Contraseña
-                <input
-                  type="password"
-                  name="password"
-                  autoComplete={mode === "register" ? "new-password" : "current-password"}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-neutral-900 outline-none focus:border-sky-400 focus:bg-white"
-                />
-              </label>
+              </div>
 
               {mode === "login" ? (
                 <div className="mt-3 flex items-center justify-between gap-2">
@@ -330,7 +319,7 @@ export function AccountMenu({ session, onLogout }: AccountMenuProps) {
                 </a>
               ) : (
                 <p className="mt-2 text-center text-[11px] leading-4 text-slate-500">
-                  Te mandamos un enlace para confirmar el correo.
+                  Con celular podés entrar de una. Con correo te mandamos un enlace de confirmación.
                 </p>
               )}
             </form>

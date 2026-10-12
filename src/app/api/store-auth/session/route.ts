@@ -4,7 +4,7 @@ import {
   applyStoreSessionCookie,
   clearStoreSessionCookie,
 } from "@/lib/store-session-cookie";
-import { loginStoreCustomer } from "@/services/store-customers/server";
+import { loginStoreCustomerFlexible } from "@/services/store-customers/server";
 import { tokenIsTallerAdmin } from "@/services/taller-gestio/server";
 
 export async function POST(request: Request) {
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const result = await loginStoreCustomer(email, password);
+    const result = await loginStoreCustomerFlexible(email, password);
     if (!result.ok || !result.customer) {
       return NextResponse.json({ ok: false, error: "No autorizado." }, { status: 401 });
     }

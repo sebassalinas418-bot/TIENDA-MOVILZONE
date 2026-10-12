@@ -1,12 +1,13 @@
-import { registerStoreCustomer } from "@/services/store-customers/server";
+import { registerStoreCustomerFlexible } from "@/services/store-customers/server";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { name?: string; email?: string; password?: string };
+  const body = (await request.json()) as { name?: string; email?: string; phone?: string; password?: string };
   try {
-    const result = await registerStoreCustomer(
+    const result = await registerStoreCustomerFlexible(
       {
         name: body.name ?? "",
         email: body.email ?? "",
+        phone: body.phone ?? "",
         password: body.password ?? "",
       },
       request,
