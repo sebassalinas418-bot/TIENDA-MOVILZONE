@@ -74,6 +74,15 @@ async function resolveShopId(client: SupabaseClient) {
   return data?.id ?? null;
 }
 
+function persistableInventoryImage(image?: string) {
+  const src = image?.trim() ?? "";
+  if (!src) return null;
+  if (src.startsWith("blob:") || src.startsWith("file:") || src.startsWith("data:")) return null;
+  if (src.startsWith("/uploads/")) return null;
+  if (/^https?:\/\//i.test(src)) return src;
+  return null;
+}
+
 function mapRow(row: ProductRow): Product {
   const category = row.category.trim() || "Otros";
   const categoryId = slugTallerCategory(category);
@@ -431,6 +440,7 @@ export async function saveTallerProduct(input: {
       .maybeSingle();
     if (readError) throw new Error(readError.message);
     if (!current) return { ok: false as const, reason: "producto" };
+    const persistImage = persistableInventoryImage(input.image);
     const { error } = await client
       .from("products")
       .update({
@@ -438,7 +448,7 @@ export async function saveTallerProduct(input: {
         sale_price: price,
         stock,
         category: input.category,
-        image_url: input.image || null,
+        ...(persistImage ? { image_url: persistImage } : {}),
       })
       .eq("id", input.id)
       .eq("shop_id", shopId);
@@ -468,7 +478,7 @@ export async function saveTallerProduct(input: {
       stock,
       sale_price: price,
       cost_price: 0,
-      image_url: input.image || null,
+      image_url: persistableInventoryImage(input.image),
       is_active: true,
     })
     .select("id")

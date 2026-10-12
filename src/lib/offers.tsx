@@ -5,6 +5,7 @@ import { describeStock, products as baseProducts, type Product } from "@/data/pr
 import { useStoreConfig } from "@/config/store-config";
 import { useOrders } from "@/lib/orders";
 import { fetchTallerCatalog, pushTallerProduct } from "@/services/taller-gestio/browser";
+import { isPersistableProductImage, pickCatalogImage } from "@/lib/store-product-images/public-url";
 import {
   categorySignature,
   mergeTallerCategoriesIntoStore,
@@ -238,6 +239,29 @@ function loadExtras() {
   }
 }
 
+function sameCatalogSnapshot(current: Product[] | null, next: Product[]) {
+  if (!current || current.length !== next.length) return false;
+  for (let i = 0; i < current.length; i += 1) {
+    const a = current[i];
+    const b = next[i];
+    if (
+      a.id !== b.id ||
+      a.title !== b.title ||
+      a.price !== b.price ||
+      a.stock !== b.stock ||
+      a.image !== b.image ||
+      a.inStock !== b.inStock ||
+      a.category !== b.category ||
+      a.stockLabel !== b.stockLabel ||
+      a.reservedQty !== b.reservedQty ||
+      a.pendingHold !== b.pendingHold
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function CatalogProvider({
   children,
   initialRemote = null,
@@ -278,16 +302,16 @@ export function CatalogProvider({
 
   useEffect(() => {
     if (!ready) return;
-    window.localStorage.setItem(OFFERS_KEY, JSON.stringify(offers));
-    window.localStorage.setItem(EXTRAS_KEY, JSON.stringify(extras));
-    window.localStorage.setItem(PRICES_KEY, JSON.stringify(prices));
-    saveProductPlacements(placements);
     try {
+      window.localStorage.setItem(OFFERS_KEY, JSON.stringify(offers));
+      window.localStorage.setItem(EXTRAS_KEY, JSON.stringify(extras));
+      window.localStorage.setItem(PRICES_KEY, JSON.stringify(prices));
+      saveProductPlacements(placements);
       window.localStorage.setItem(IMAGES_KEY, JSON.stringify(images));
+      window.localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
     } catch {
-      /* data URLs pueden llenar la cuota; se mantiene en memoria */
+      /* data URLs / plantillas de Redes pueden llenar la cuota */
     }
-    window.localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
   }, [extras, offers, prices, placements, images, hidden, ready]);
 
   useEffect(() => {
@@ -309,7 +333,7 @@ export function CatalogProvider({
         return;
       }
       if (cancel || !products) return;
-      setRemote(products);
+      setRemote((current) => (sameCatalogSnapshot(current, products) ? current : products));
       const titles = new Set(products.map((product) => product.title));
       setExtras((current) => {
         const dropped = current.filter((item) => titles.has(item.title));
@@ -323,18 +347,24 @@ export function CatalogProvider({
             return next;
           });
         }
-        return current.filter((item) => !titles.has(item.title));
+        const next = current.filter((item) => !titles.has(item.title));
+        return next.length === current.length ? current : next;
       });
       setPrices((current) => {
+        let changed = false;
         const next = { ...current };
-        for (const product of products) next[product.id] = product.price;
-        return next;
+        for (const product of products) {
+          if (next[product.id] === product.price) continue;
+          next[product.id] = product.price;
+          changed = true;
+        }
+        return changed ? next : current;
       });
       for (const product of products) setProductStock(product.id, product.stock);
     }
 
     void pull();
-    const timer = window.setInterval(() => void pull(), 4000);
+    const timer = window.setInterval(() => void pull(), 15000);
     const onShow = () => {
       if (document.visibilityState === "hidden") return;
       void pull();
@@ -386,7 +416,7 @@ export function CatalogProvider({
     }
 
     void pullOverlay();
-    const timer = window.setInterval(() => void pullOverlay(), 4000);
+    const timer = window.setInterval(() => void pullOverlay(), 15000);
     return () => {
       cancel = true;
       window.clearInterval(timer);
@@ -410,7 +440,7 @@ export function CatalogProvider({
           {
             ...product,
             price: prices[product.id] ?? product.price,
-            image: images[product.id] ?? product.image,
+            image: pickCatalogImage(images[product.id], product.image),
           },
           offers[product.id],
         ),
@@ -440,15 +470,18 @@ export function CatalogProvider({
     if (patch.offer) saveOffer(productId, patch.offer);
     if (patch.image && patch.image.trim()) {
       const image = patch.image.trim();
-      setImages((current) => ({ ...current, [productId]: image }));
-      setExtras((current) => current.map((item) => (item.id === productId ? { ...item, image } : item)));
+      if (isPersistableProductImage(image)) {
+        setImages((current) => ({ ...current, [productId]: image }));
+        setExtras((current) => current.map((item) => (item.id === productId ? { ...item, image } : item)));
+      }
     }
     const current = products.find((item) => item.id === productId);
     if (!current) return;
     const priceChanged = patch.price != null;
     const stockChanged = patch.stock != null;
     const offerChanged = Boolean(patch.offer);
-    if (!priceChanged && !stockChanged && !offerChanged) return;
+    const persistImage = isPersistableProductImage(patch.image) ? patch.image!.trim() : "";
+    if (!priceChanged && !stockChanged && !offerChanged && !persistImage) return;
     const originalImage =
       (remote ?? []).find((item) => item.id === productId)?.image ??
       extras.find((item) => item.id === productId)?.image ??
@@ -459,7 +492,7 @@ export function CatalogProvider({
       price: patch.price ?? current.price,
       stock: patch.stock ?? stock[productId] ?? current.stock,
       category: current.category,
-      image: originalImage,
+      image: persistImage || (isPersistableProductImage(originalImage) ? originalImage : undefined),
     });
   }
 

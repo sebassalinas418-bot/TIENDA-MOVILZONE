@@ -82,6 +82,7 @@ export function ProductCard({
           <img
             src={product.image}
             alt=""
+            referrerPolicy="no-referrer"
             className={`h-full w-full object-cover ${hidden ? "grayscale" : ""}`}
           />
         </div>

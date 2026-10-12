@@ -4,7 +4,12 @@ import { useState, type ReactNode } from "react";
 import { useStoreConfig } from "@/config/store-config";
 import { brands, formatPrice } from "@/data/products";
 import { isolateProductFile } from "@/lib/admin-image-tools/isolate-product";
-import { fileToDataUrl, prepareProductImageFile } from "@/lib/admin-image-tools/prepare-product-image";
+import { prepareProductImageFile } from "@/lib/admin-image-tools/prepare-product-image";
+import {
+  uploadStoreProductImage,
+  uploadStoreProductImageFromDataUrl,
+} from "@/lib/store-product-images/client-upload";
+import { isPersistableProductImage } from "@/lib/store-product-images/public-url";
 import { quotePrice, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
 
 type OfferDraft = {
@@ -48,7 +53,7 @@ export function ProductEditModal({
     numericPrice >= 1 &&
     Number.isFinite(numericStock) &&
     numericStock >= 0 &&
-    isImageSource(image.trim()) &&
+    isPersistableProductImage(image.trim()) &&
     (!draft.active || !quote.error);
 
   return (
@@ -137,7 +142,7 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
     Number.isFinite(numericStock) &&
     numericStock >= 0 &&
     Boolean(category) &&
-    isImageSource(image.trim()) &&
+    isPersistableProductImage(image.trim()) &&
     (!draft.active || !quote.error);
 
   return (
@@ -388,17 +393,24 @@ function ImagePicker({
     onError("");
     try {
       if (!autoIsolate) {
-        onChange(await compressImage(file));
+        onChange(await uploadStoreProductImage(file));
         return;
       }
       try {
-        onChange(await isolateProductFile(file));
+        const isolated = await isolateProductFile(file);
+        onChange(
+          isolated.startsWith("data:")
+            ? await uploadStoreProductImageFromDataUrl(isolated)
+            : isolated.startsWith("http")
+              ? isolated
+              : await uploadStoreProductImage(file),
+        );
       } catch {
-        onChange(await fileToDataUrl(await prepareProductImageFile(file)));
+        onChange(await uploadStoreProductImage(await prepareProductImageFile(file)));
         onError("Se usó la foto original porque no se pudo quitar el fondo.");
       }
-    } catch {
-      onError("No se pudo leer esa imagen.");
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "No se pudo subir esa imagen a Storage.");
     } finally {
       setReading(false);
     }
@@ -435,7 +447,7 @@ function ImagePicker({
             : "bg-sky-500 text-white hover:bg-sky-400"
         }`}
       >
-        {reading ? (autoIsolate ? "Quitando fondo con IA..." : "Leyendo imagen...") : "Subir imagen"}
+          {reading ? (autoIsolate ? "Subiendo foto..." : "Subiendo imagen...") : "Subir imagen"}
         <input
           type="file"
           accept="image/*"
@@ -448,7 +460,9 @@ function ImagePicker({
           }}
         />
       </label>
-      {value.startsWith("data:") ? <p className="mt-2 text-xs text-gray-500">Imagen lista para guardar. Solo se ve en la tienda web.</p> : null}
+      {value.startsWith("https://") ? (
+        <p className="mt-2 text-xs text-gray-500">Foto en Storage. Se ve en celular y escritorio.</p>
+      ) : null}
       {error ? <p className="mt-2 text-sm font-medium text-rose-700">{error}</p> : null}
     </div>
   );
@@ -470,8 +484,8 @@ export function SubcategoryImageModal({
 
   function save() {
     const next = value.trim();
-    if (!isImageSource(next)) {
-      setError("Subí una imagen o pegá una dirección http(s) o una ruta del sitio.");
+    if (!isPersistableProductImage(next)) {
+      setError("Subí una imagen. Tiene que quedar una URL http(s) de Storage, no blob ni data.");
       return;
     }
     onSave(next);
@@ -490,51 +504,6 @@ export function SubcategoryImageModal({
       </div>
     </Modal>
   );
-}
-
-function isImageSource(value: string) {
-  if (value.startsWith("/") && !value.startsWith("//")) return true;
-  if (value.startsWith("data:image/")) return true;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function compressImage(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error("read"));
-    reader.onload = () => {
-      const source = String(reader.result ?? "");
-      if (file.type === "image/svg+xml") {
-        resolve(source);
-        return;
-      }
-      const img = new Image();
-      img.onload = () => {
-        const max = 720;
-        const scale = Math.min(1, max / Math.max(img.width, img.height));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(img.width * scale));
-        canvas.height = Math.max(1, Math.round(img.height * scale));
-        const context = canvas.getContext("2d");
-        if (!context) {
-          resolve(source);
-          return;
-        }
-        context.fillStyle = "#ffffff";
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", 0.82));
-      };
-      img.onerror = () => reject(new Error("image"));
-      img.src = source;
-    };
-    reader.readAsDataURL(file);
-  });
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {

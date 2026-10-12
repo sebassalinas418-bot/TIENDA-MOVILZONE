@@ -169,7 +169,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }
 
     void pull();
-    const timer = window.setInterval(() => void pull(), 4000);
+    const timer = window.setInterval(() => void pull(), 15000);
     return () => window.clearInterval(timer);
   }, [orders, ready]);
 
@@ -178,7 +178,11 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }
 
   function setProductStock(productId: string, quantity: number) {
-    setStock((current) => ({ ...current, [productId]: Math.max(0, Math.floor(quantity)) }));
+    const nextQty = Math.max(0, Math.floor(quantity));
+    setStock((current) => {
+      if (current[productId] === nextQty) return current;
+      return { ...current, [productId]: nextQty };
+    });
   }
 
   function placeOrder(input: PlaceOrderInput) {

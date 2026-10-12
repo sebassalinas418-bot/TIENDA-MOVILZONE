@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -290,13 +291,17 @@ export function StoreConfigProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  function updateConfig(partial: Partial<StoreConfig>) {
+  const updateConfig = useCallback((partial: Partial<StoreConfig>) => {
     setConfig((current) => {
       const next = { ...current, ...partial };
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, revision: CONFIG_REVISION }));
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, revision: CONFIG_REVISION }));
+      } catch {
+        /* cuota llena */
+      }
       return next;
     });
-  }
+  }, []);
 
   return (
     <StoreConfigContext.Provider value={{ config, updateConfig }}>

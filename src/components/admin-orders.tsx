@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { BusinessSettings } from "@/components/admin-business";
 import { AdminCustomers } from "@/components/admin-customers";
+import { AdminRedes } from "@/components/admin-redes";
 import { StoreCatalog } from "@/components/store-catalog";
 import { SiteFrame } from "@/components/site-frame";
 import { describeStock, formatPrice } from "@/data/products";
@@ -24,7 +25,7 @@ function formatWhen(value: string) {
   }).format(new Date(value));
 }
 
-type AdminSection = "pedidos" | "negocio" | "tienda" | "correos";
+type AdminSection = "pedidos" | "negocio" | "tienda" | "correos" | "redes";
 
 const sectionCopy: Record<AdminSection, { title: string; text: string }> = {
   pedidos: {
@@ -42,6 +43,10 @@ const sectionCopy: Record<AdminSection, { title: string; text: string }> = {
   correos: {
     title: "Correos",
     text: "Clientes registrados en la tienda web y si ya confirmaron el correo. No forma parte de TallerGestio.",
+  },
+  redes: {
+    title: "Redes",
+    text: "Publicaciones de Instagram con Gemini. Solo el administrador ve esta sección.",
   },
 };
 
@@ -93,6 +98,7 @@ export function AdminOrders() {
                 ["negocio", "Negocio"],
                 ["tienda", "Tienda"],
                 ["correos", "Correos"],
+                ["redes", "Redes"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -113,6 +119,10 @@ export function AdminOrders() {
         <Suspense fallback={null}>
           <StoreCatalog admin />
         </Suspense>
+      ) : section === "redes" ? (
+        <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+          <AdminRedes />
+        </div>
       ) : (
         <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
           {section === "negocio" ? (

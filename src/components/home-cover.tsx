@@ -67,7 +67,7 @@ export function HomeSlider() {
       setIndex((current) => (current + 1) % SLIDES.length);
     }, AUTO_PLAY_MS);
     return () => window.clearInterval(timer);
-  }, [paused, index]);
+  }, [paused]);
 
   function step(direction: -1 | 1) {
     setIndex((current) => (current + direction + SLIDES.length) % SLIDES.length);
