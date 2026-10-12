@@ -4,6 +4,7 @@ import { useState, type DragEvent, type MouseEvent } from "react";
 import { formatPrice } from "@/data/products";
 import type { CatalogProduct } from "@/lib/offers";
 import { ProductPreviewModal } from "@/components/product-preview-modal";
+import { useFavorite } from "@/lib/store-favorites/use-favorite";
 import { isStoreSoldOut, SOLD_OUT_LABEL, soldOutStrikeClass } from "@/lib/store-sold-out/presentation";
 
 type ProductCardProps = {
@@ -25,7 +26,7 @@ export function ProductCard({
   draggable,
   onDragStart,
 }: ProductCardProps) {
-  const [favorite, setFavorite] = useState(false);
+  const { on: favorite, toggle: toggleFavorite } = useFavorite(product.id);
   const [preview, setPreview] = useState(false);
   const hidden = Boolean(product.storeHidden);
   const soldOut = isStoreSoldOut(product);
@@ -70,7 +71,7 @@ export function ProductCard({
         data-card-control
         aria-pressed={favorite}
         aria-label={favorite ? "Quitar de favoritos" : "Marcar como favorito"}
-        onClick={() => setFavorite((current) => !current)}
+        onClick={() => toggleFavorite()}
         className="absolute top-1.5 right-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-gray-400 transition-colors hover:text-sky-500 sm:top-3 sm:right-3 sm:h-8 sm:w-8"
       >
         <HeartIcon filled={favorite} />

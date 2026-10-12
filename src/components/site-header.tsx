@@ -30,6 +30,7 @@ function linkIsActive(pathname: string, vista: string | null, href: string, labe
   if (label === "Inicio") return pathname === "/";
   if (label === "Tienda") return pathname === "/tienda" && vista !== "ofertas";
   if (label === "Ofertas") return pathname === "/tienda" && vista === "ofertas";
+  if (label === "Favoritos") return pathname === "/favoritos";
   return pathname === href;
 }
 
@@ -117,7 +118,7 @@ export function SiteHeader({
 
       <nav className="hidden border-t border-white/10 lg:block" aria-label="Secciones">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-1.5 sm:gap-4 sm:px-6 sm:py-2">
-          <SectionNav />
+          <SectionNav loggedIn={Boolean(session)} />
           <div className="flex shrink-0 items-center gap-1">
             <a
               href={instagramHref}
@@ -175,24 +176,35 @@ function TopTicker() {
   );
 }
 
-function SectionNav() {
+function SectionNav({ loggedIn }: { loggedIn: boolean }) {
   const pathname = usePathname();
   return (
-    <Suspense fallback={<SectionLinks pathname={pathname} vista={null} />}>
-      <SectionLinksLive pathname={pathname} />
+    <Suspense fallback={<SectionLinks pathname={pathname} vista={null} loggedIn={loggedIn} />}>
+      <SectionLinksLive pathname={pathname} loggedIn={loggedIn} />
     </Suspense>
   );
 }
 
-function SectionLinksLive({ pathname }: { pathname: string }) {
+function SectionLinksLive({ pathname, loggedIn }: { pathname: string; loggedIn: boolean }) {
   const vista = useSearchParams().get("vista");
-  return <SectionLinks pathname={pathname} vista={vista} />;
+  return <SectionLinks pathname={pathname} vista={vista} loggedIn={loggedIn} />;
 }
 
-function SectionLinks({ pathname, vista }: { pathname: string; vista: string | null }) {
+function SectionLinks({
+  pathname,
+  vista,
+  loggedIn,
+}: {
+  pathname: string;
+  vista: string | null;
+  loggedIn: boolean;
+}) {
+  const items = loggedIn
+    ? [...links, { href: "/favoritos", label: "Favoritos" }]
+    : links;
   return (
     <div className="flex min-w-0 gap-1 overflow-x-auto">
-      {links.map((link) => {
+      {items.map((link) => {
         const active = linkIsActive(pathname, vista, link.href, link.label);
         return (
           <a

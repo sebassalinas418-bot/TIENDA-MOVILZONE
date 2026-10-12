@@ -249,6 +249,8 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
                 { href: "/", label: "Inicio" },
                 { href: "/tienda", label: "Tienda" },
                 { href: "/tienda?vista=ofertas", label: "Ofertas" },
+                { href: "/servicio-tecnico", label: "Servicio técnico" },
+                ...(readSession() ? [{ href: "/favoritos", label: "Favoritos" }] : []),
               ].map((link) => (
                 <button
                   key={link.label}
