@@ -380,35 +380,75 @@ export async function listStoreCustomers() {
 
 type AdminClient = NonNullable<ReturnType<typeof adminClient>>;
 
+async function findByEmailSafe(client: AdminClient, email: string) {
+  try {
+    const { data, error } = await client.from(TABLE).select("*").eq("email", email).maybeSingle();
+    if (error || !data) return null;
+    return data as CustomerRow;
+  } catch {
+    return null;
+  }
+}
+
 async function findCustomerByPhone(client: AdminClient, normalized: string) {
-  const placeholder = phonePlaceholderEmail(normalized);
-  const byEmail = await client.from(TABLE).select("*").eq("email", placeholder).maybeSingle();
-  if (byEmail.data) return byEmail.data as CustomerRow;
+  const byPlaceholder = await findByEmailSafe(client, phonePlaceholderEmail(normalized));
+  if (byPlaceholder) return byPlaceholder;
 
-  const byNorm = await client.from(TABLE).select("*").eq("phone_normalized", normalized).maybeSingle();
-  if (!byNorm.error && byNorm.data) return byNorm.data as CustomerRow;
+  for (const filter of [
+    { phone_normalized: normalized },
+    { phone: displayStorePhone(normalized) },
+    { phone: normalized },
+  ]) {
+    try {
+      const { data, error } = await client.from(TABLE).select("*").match(filter).maybeSingle();
+      if (!error && data) return data as CustomerRow;
+    } catch {
+      // Columna ausente u otro error de schema: seguimos con el siguiente filtro.
+    }
+  }
+  return null;
+}
 
-  const listed = await client.from(TABLE).select("*").not("phone", "is", null);
-  if (listed.error || !listed.data) return null;
-  const last10 = normalized.slice(-10);
-  const match = listed.data.find((row) => {
-    const stored = String((row as CustomerRow).phone ?? "");
-    const storedNorm = normalizeStorePhone(stored);
-    const digits = stored.replace(/\D/g, "");
-    return storedNorm === normalized || digits === normalized || digits.endsWith(last10);
-  });
-  return (match as CustomerRow | undefined) ?? null;
+async function insertStoreCustomerRow(client: AdminClient, row: Record<string, unknown>) {
+  const attempts: Record<string, unknown>[] = [{ ...row }];
+  if ("phone_normalized" in row) {
+    const { phone_normalized: _ignored, ...withoutNorm } = row;
+    attempts.push(withoutNorm);
+  }
+  if ("phone" in row) {
+    const { phone: _phone, phone_normalized: _norm, ...core } = row;
+    attempts.push(core);
+  }
+
+  let lastError = "No se pudo crear la cuenta.";
+  for (const attempt of attempts) {
+    try {
+      const { error } = await client.from(TABLE).insert(attempt);
+      if (!error) return { ok: true as const };
+      lastError = error.message || lastError;
+      if (!/phone|schema cache|column|could not find/i.test(lastError)) {
+        return { ok: false as const, error: lastError };
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : lastError;
+    }
+  }
+  return { ok: false as const, error: lastError };
 }
 
 async function writeCustomerPhone(client: AdminClient, id: string, phoneRaw: string) {
   const normalized = normalizeStorePhone(phoneRaw);
   if (!normalized) return { ok: false as const, error: "Ingresá un celular válido." };
   const phone = displayStorePhone(normalized);
-  const first = await client
-    .from(TABLE)
-    .update({ phone, phone_normalized: normalized })
-    .eq("id", id);
-  if (!first.error) return { ok: true as const, phone, normalized };
+  try {
+    const first = await client
+      .from(TABLE)
+      .update({ phone, phone_normalized: normalized })
+      .eq("id", id);
+    if (!first.error) return { ok: true as const, phone, normalized };
+  } catch {
+    // phone_normalized puede no existir todavía
+  }
   const retry = await client.from(TABLE).update({ phone }).eq("id", id);
   if (retry.error) return { ok: false as const, error: retry.error.message };
   return { ok: true as const, phone, normalized };
@@ -441,46 +481,45 @@ export async function registerStoreCustomerFlexible(
   if (name.length < 2) return { ok: false as const, error: "Ingresá tu nombre." };
   if (password.length < 6) return { ok: false as const, error: "La contraseña debe tener al menos 6 caracteres." };
 
-  const existingPhone = await findCustomerByPhone(client, normalizedPhone!);
-  if (existingPhone) {
-    return { ok: false as const, error: "Ese celular ya está registrado. Iniciá sesión." };
-  }
+  try {
+    const existingPhone = await findCustomerByPhone(client, normalizedPhone!);
+    if (existingPhone) {
+      return { ok: false as const, error: "Ese celular ya está registrado. Iniciá sesión." };
+    }
 
-  if (email) {
-    const created = await registerStoreCustomer({ name, email, password }, request);
-    if (!created.ok) return created;
-    const { data } = await client.from(TABLE).select("id").eq("email", email).maybeSingle();
-    if (data?.id) await writeCustomerPhone(client, String(data.id), phoneRaw);
-    return created;
-  }
+    if (email) {
+      const created = await registerStoreCustomer({ name, email, password }, request);
+      if (!created.ok) return created;
+      const { data } = await client.from(TABLE).select("id").eq("email", email).maybeSingle();
+      if (data?.id) await writeCustomerPhone(client, String(data.id), phoneRaw);
+      return created;
+    }
 
-  const phone = displayStorePhone(normalizedPhone!);
-  const placeholder = phonePlaceholderEmail(normalizedPhone!);
-  const now = new Date().toISOString();
-  const row: Record<string, unknown> = {
-    email: placeholder,
-    name,
-    phone,
-    phone_normalized: normalizedPhone,
-    password_hash: await hashPassword(password),
-    email_verified_at: now,
-    verify_token: null,
-    verify_expires_at: null,
-  };
-  const inserted = await client.from(TABLE).insert(row);
-  if (inserted.error && /phone_normalized/i.test(inserted.error.message)) {
-    delete row.phone_normalized;
-    const retry = await client.from(TABLE).insert(row);
-    if (retry.error) return { ok: false as const, error: retry.error.message };
-  } else if (inserted.error) {
-    return { ok: false as const, error: inserted.error.message };
+    const phone = displayStorePhone(normalizedPhone!);
+    const now = new Date().toISOString();
+    const inserted = await insertStoreCustomerRow(client, {
+      email: phonePlaceholderEmail(normalizedPhone!),
+      name,
+      phone,
+      phone_normalized: normalizedPhone,
+      password_hash: await hashPassword(password),
+      email_verified_at: now,
+      verify_token: null,
+      verify_expires_at: null,
+    });
+    if (!inserted.ok) return inserted;
+    return {
+      ok: true as const,
+      pending: false as const,
+      mailed: false,
+      phoneOnly: true as const,
+    };
+  } catch (err) {
+    return {
+      ok: false as const,
+      error: err instanceof Error && err.message ? err.message : "No se pudo registrar.",
+    };
   }
-  return {
-    ok: true as const,
-    pending: false as const,
-    mailed: false,
-    phoneOnly: true as const,
-  };
 }
 
 /** Login por correo (delegado) o por celular. No modifica loginStoreCustomer. */
