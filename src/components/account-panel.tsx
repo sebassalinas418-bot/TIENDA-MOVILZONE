@@ -12,29 +12,13 @@ import {
   type DemoSession,
 } from "@/lib/session";
 import type { StoreCustomerOrder, StoreCustomerPublic } from "@/services/store-customers/types";
+import {
+  ACCOUNT_SIDEBAR_NAV,
+  isAccountSidebarSection,
+  type AccountSidebarSection,
+} from "@/lib/store-account-nav/sidebar";
 
-type Section =
-  | "escritorio"
-  | "pedidos"
-  | "descargas"
-  | "direccion"
-  | "cuenta"
-  | "favoritos"
-  | "espera"
-  | "corriente"
-  | "facturas";
-
-const nav: { id: Section; label: string }[] = [
-  { id: "escritorio", label: "Escritorio" },
-  { id: "pedidos", label: "Pedidos" },
-  { id: "descargas", label: "Descargas" },
-  { id: "direccion", label: "Dirección" },
-  { id: "cuenta", label: "Detalles de la cuenta" },
-  { id: "favoritos", label: "Lista de favoritos" },
-  { id: "espera", label: "En la lista de espera" },
-  { id: "corriente", label: "Cuenta Corriente" },
-  { id: "facturas", label: "Facturas" },
-];
+type Section = AccountSidebarSection;
 
 function formatWhen(value: string) {
   const date = new Date(value);
@@ -69,7 +53,7 @@ export function AccountPanel() {
     setSession(current);
     setName(current.name);
     const seccion = new URLSearchParams(window.location.search).get("seccion");
-    if (seccion === "pedidos" || seccion === "cuenta") setSection(seccion);
+    if (seccion && isAccountSidebarSection(seccion)) setSection(seccion);
   }, [router]);
 
   useEffect(() => {
@@ -171,7 +155,7 @@ export function AccountPanel() {
             <p className="text-sm font-semibold text-neutral-950">{displayName}</p>
             <p className="mt-0.5 truncate text-xs text-gray-500">{session.email}</p>
             <nav className="mt-6 space-y-1">
-              {nav.map((item) => (
+              {ACCOUNT_SIDEBAR_NAV.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -292,11 +276,6 @@ export function AccountPanel() {
               </form>
             ) : null}
 
-            {section === "descargas" || section === "favoritos" || section === "espera" || section === "corriente" || section === "facturas" ? (
-              <p className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
-                Esta sección todavía no tiene movimientos.
-              </p>
-            ) : null}
           </section>
         </div>
       </main>
