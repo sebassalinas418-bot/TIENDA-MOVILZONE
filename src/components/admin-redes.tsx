@@ -288,7 +288,7 @@ export function AdminRedes() {
         </label>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_min(100%,34rem)]">
         <div className="rounded-3xl border border-black/5 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold text-neutral-950">Generar post</h2>
           <label className="mt-4 block text-sm font-medium">
@@ -396,11 +396,12 @@ export function AdminRedes() {
                 <p className="mt-2 text-xs text-gray-500">Subí el marco. Encima van la foto, el precio y 3 características.</p>
               )}
             </label>
-            <div className="overflow-x-auto rounded-[1.5rem] border border-black/10 bg-[#09090b] p-2">
+            <div className="overflow-x-auto rounded-[1.5rem] border border-black/10 bg-slate-100 p-2">
               <InstagramProductCard
                 ref={cardRef}
                 templateSrc={templateSrc}
                 title={preview.product.title}
+                headline={preview.headline}
                 priceLabel={formatPrice(preview.product.price)}
                 image={preferRealProductImage([
                   preview.product.image,
