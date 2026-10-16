@@ -105,7 +105,11 @@ export function AdminRedes() {
         setPosts(body.posts);
         writeLocalPosts(body.posts);
       }
-      if (body.schedule) setSchedule({ ...defaultSocialSchedule(), ...body.schedule });
+      if (body.schedule) {
+        const next = { ...defaultSocialSchedule(), ...body.schedule };
+        if (next.templateId === CUSTOM_TEMPLATE_ID) next.templateId = DEFAULT_TEMPLATE_ID;
+        setSchedule(next);
+      }
       setAiOn(Boolean(body.status?.ai));
       setGeminiOn(Boolean(body.status?.gemini) || Boolean(CLIENT_GEMINI_KEY));
       setOpenaiOn(Boolean(body.status?.openai) || Boolean(CLIENT_OPENAI_KEY));
@@ -117,10 +121,13 @@ export function AdminRedes() {
   const selected = pool.find((item) => item.id === selectedId) ?? null;
   const handle = config.instagram || "movilzone.gp";
   const templateMode = schedule.templateMode || "sequential";
-  const activeTemplateId =
-    templateMode === "fixed"
-      ? schedule.templateId || DEFAULT_TEMPLATE_ID
-      : preview?.templateId || schedule.templateId || DEFAULT_TEMPLATE_ID;
+  const activeTemplateId = (() => {
+    const raw =
+      templateMode === "fixed"
+        ? schedule.templateId || DEFAULT_TEMPLATE_ID
+        : preview?.templateId || schedule.templateId || DEFAULT_TEMPLATE_ID;
+    return raw === CUSTOM_TEMPLATE_ID ? DEFAULT_TEMPLATE_ID : raw;
+  })();
   const previewTemplateSrc = templateSrc(activeTemplateId, customTemplate);
   const previewLayout = templateLayout(activeTemplateId);
 
@@ -446,7 +453,7 @@ export function AdminRedes() {
                   </button>
                 ))}
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
                 {OFFICIAL_REDES_TEMPLATES.map((item) => {
                   const selectedTemplate = activeTemplateId === item.id;
                   return (
@@ -454,28 +461,26 @@ export function AdminRedes() {
                       key={item.id}
                       type="button"
                       title={item.hint}
-                      onClick={() =>
+                      onClick={() => {
+                        setCustomTemplate("");
+                        try {
+                          localStorage.removeItem(LOCAL_TEMPLATE);
+                        } catch {
+                          /* ignore */
+                        }
                         void saveSchedule({
                           ...schedule,
                           templateMode: "fixed",
                           templateId: item.id,
                           lastTemplateIndex: OFFICIAL_REDES_TEMPLATES.findIndex((entry) => entry.id === item.id),
                           productPool: pool,
-                        })
-                      }
+                        });
+                      }}
                       className={`overflow-hidden rounded-xl border-2 ${
                         selectedTemplate ? "border-cyan-400" : "border-transparent"
                       }`}
                     >
-                      <span
-                        className={`block aspect-square w-full ${
-                          item.layout.kind === "studio"
-                            ? "bg-[#05070c]"
-                            : item.layout.kind === "frame"
-                              ? "bg-[linear-gradient(135deg,#070b12_55%,#22d3ee_100%)]"
-                              : "bg-[linear-gradient(215deg,#22d3ee_0%,#070b12_42%)]"
-                        }`}
-                      />
+                      <span className={`block aspect-square w-full ${item.thumb}`} />
                       <span className="block truncate bg-neutral-950 px-1 py-1 text-center text-[10px] font-bold text-white">
                         {item.name}
                       </span>
@@ -531,11 +536,11 @@ export function AdminRedes() {
                 </button>
               ) : (
                 <p className="mt-2 text-[11px] text-gray-500">
-                  Fija usa la elegida. Random y secuencial rotan las 3 oficiales en cada post y en cada horario automático.
+                  Fija usa la elegida. Random y secuencial rotan las 5 oficiales. No uses un JPG que ya tenga textos.
                 </p>
               )}
             </div>
-            <div className="overflow-x-auto rounded-[1.5rem] border border-black/10 bg-slate-100 p-2">
+            <div className="flex justify-center overflow-x-auto rounded-[1.5rem] border border-black/10 bg-slate-100 p-2">
               <InstagramProductCard
                 ref={cardRef}
                 templateSrc={previewTemplateSrc}
@@ -621,7 +626,9 @@ function writeLocalPosts(posts: SocialPost[]) {
 function readLocalSchedule(): SocialSchedule {
   try {
     const raw = localStorage.getItem(LOCAL_SCHEDULE);
-    return raw ? { ...defaultSocialSchedule(), ...(JSON.parse(raw) as SocialSchedule) } : defaultSocialSchedule();
+    const parsed = raw ? { ...defaultSocialSchedule(), ...(JSON.parse(raw) as SocialSchedule) } : defaultSocialSchedule();
+    if (parsed.templateId === CUSTOM_TEMPLATE_ID) parsed.templateId = DEFAULT_TEMPLATE_ID;
+    return parsed;
   } catch {
     return defaultSocialSchedule();
   }

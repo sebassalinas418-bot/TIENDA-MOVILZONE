@@ -30,96 +30,142 @@ export const InstagramProductCard = forwardRef<HTMLDivElement, InstagramProductC
     const zones = layout ?? templateLayout(templateId || DEFAULT_TEMPLATE_ID);
     const bullets = features.map(cleanFeature).filter(Boolean).slice(0, 3);
     const photo = redesCardImageSrc(image);
-    const custom = Boolean(templateId === CUSTOM_TEMPLATE_ID && templateSrc.trim());
+    const customBg = templateId === CUSTOM_TEMPLATE_ID ? templateSrc.trim() : "";
     const kind = zones.kind;
 
     return (
       <div
         ref={ref}
-        className="relative flex flex-col overflow-hidden bg-[#070b12] text-white"
+        className="relative aspect-square overflow-hidden bg-[#020617] text-white"
         style={{ width: 540, height: 540, minWidth: 540, minHeight: 540 }}
       >
-        {custom ? (
+        {customBg ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={templateSrc} alt="" crossOrigin="anonymous" className="absolute inset-0 z-0 h-full w-full object-cover" />
+          <img src={customBg} alt="" crossOrigin="anonymous" className="absolute inset-0 z-0 h-full w-full object-cover" />
         ) : (
-          <Accent kind={kind} />
+          <Backdrop kind={kind} />
         )}
 
-        <header className="relative z-10 flex h-[72px] shrink-0 items-center px-5">
-          <div>
-            <p className="text-[28px] leading-none font-black tracking-tight text-cyan-400">MZ</p>
-            <p className="text-[10px] font-black tracking-[0.18em] text-white">MOVIL ZONE</p>
-            <p className="text-[8px] font-semibold tracking-[0.14em] text-cyan-200/80">SERVICIO TÉCNICO & VENTAS</p>
+        {photo ? (
+          <div className={zones.product}>
+            <div className="absolute inset-x-[12%] bottom-[6%] h-12 rounded-full bg-cyan-400/40 blur-2xl" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photo}
+              alt={title}
+              crossOrigin="anonymous"
+              className="relative z-[1] h-full w-full object-contain drop-shadow-[0_12px_40px_rgba(34,211,238,0.45)]"
+            />
           </div>
-        </header>
+        ) : null}
 
-        <div className="relative z-10 flex min-h-0 flex-1 gap-4 px-5 pb-3">
-          <div
-            className={`flex h-full w-[48%] items-center justify-center overflow-hidden rounded-[22px] border-[3px] p-3 ${
-              kind === "frame" ? "border-cyan-400 bg-black/40" : "border-cyan-400/90 bg-black/20"
-            }`}
-          >
-            {photo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={photo} alt={title} crossOrigin="anonymous" className="max-h-full max-w-full object-contain" />
-            ) : null}
-          </div>
-
-          <div className="flex w-[52%] min-w-0 flex-col pt-1">
-            <h2 className="text-[26px] leading-[1.05] font-black tracking-tight text-white uppercase">{shortenTitle(title)}</h2>
-            {headline ? (
-              <p className="mt-2 text-[12px] font-semibold tracking-wide text-cyan-300 uppercase">{shortHeadline(headline)}</p>
-            ) : null}
-            <ul className="mt-4 flex flex-col gap-2.5">
+        <div className={zones.panel}>
+          {kind !== "hero" ? <StockChip /> : null}
+          <h2 className={zones.title}>{shortenTitle(title)}</h2>
+          {headline ? <p className={zones.headline}>{shortHeadline(headline)}</p> : null}
+          {kind !== "hero" ? (
+            <ul className={zones.features}>
               {bullets.map((item) => (
-                <li key={item} className="flex items-start gap-2">
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-cyan-400 text-[11px] font-black text-cyan-300">
-                    ✓
-                  </span>
-                  <span className="pt-0.5 text-[12px] leading-snug font-bold tracking-wide text-white uppercase">{item}</span>
-                </li>
+                <Feature key={item} label={item} kind={kind} />
               ))}
             </ul>
-            <p className="mt-auto pb-1 text-right text-[32px] leading-none font-black text-cyan-400">{priceLabel}</p>
-          </div>
+          ) : null}
         </div>
 
-        <footer className="relative z-10 flex h-[44px] shrink-0 items-center justify-center gap-3 bg-black">
-          <span className="text-[12px] font-bold text-white">Calle 9 N° 421</span>
-          <span className="text-cyan-400">|</span>
-          <span className="text-[12px] font-black text-white">2302 57 3969</span>
-        </footer>
+        {kind === "hero" ? (
+          <ul className={zones.features}>
+            {bullets.map((item) => (
+              <Feature key={item} label={item} kind={kind} />
+            ))}
+          </ul>
+        ) : null}
+
+        <div className={zones.price}>{priceLabel}</div>
       </div>
     );
   },
 );
 
-function Accent({ kind }: { kind: TemplateKind }) {
-  if (kind === "studio") {
+function Backdrop({ kind }: { kind: TemplateKind }) {
+  return (
+    <div className="absolute inset-0 z-0 overflow-hidden bg-[#020617]">
+      <div
+        className="absolute inset-0 opacity-[0.16]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(34,211,238,0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.35) 1px, transparent 1px)",
+          backgroundSize: "42px 42px",
+        }}
+      />
+      {kind === "left" ? <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-cyan-400/20 blur-3xl" /> : null}
+      {kind === "right" ? (
+        <>
+          <div className="absolute -right-10 bottom-16 h-44 w-44 rounded-full bg-cyan-400/30 blur-3xl" />
+          <div className="absolute right-0 bottom-0 h-24 w-full bg-gradient-to-t from-cyan-500/20 to-transparent" />
+        </>
+      ) : null}
+      {kind === "hero" ? (
+        <>
+          <div className="absolute top-[-20%] left-1/2 h-[70%] w-[90%] -translate-x-1/2 rounded-full bg-cyan-400/25 blur-3xl" />
+          <div className="absolute top-0 left-0 h-2 w-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
+          <div className="absolute bottom-16 left-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-300 to-transparent" />
+          <div className="absolute right-3 top-24 rotate-90 text-[56px] font-black tracking-[0.3em] text-white/5">MZ</div>
+        </>
+      ) : null}
+      {kind === "stack" ? (
+        <>
+          <div className="absolute inset-x-0 bottom-0 h-[46%] bg-gradient-to-t from-cyan-950 via-black/90 to-transparent" />
+          <div className="absolute bottom-0 left-0 h-1.5 w-full bg-cyan-400" />
+        </>
+      ) : null}
+      {kind === "minimal" ? (
+        <>
+          <div className="absolute inset-y-0 left-0 w-2 bg-gradient-to-b from-cyan-300 via-cyan-500 to-cyan-900" />
+          <div className="absolute bottom-[-20%] left-[-10%] h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
+          <div className="absolute top-20 right-8 h-24 w-24 rounded-full border border-cyan-400/30" />
+          <div className="absolute top-28 right-16 h-10 w-10 rounded-full bg-cyan-400/20" />
+        </>
+      ) : null}
+      <Mark center={kind === "hero"} />
+    </div>
+  );
+}
+
+function Mark({ center = false }: { center?: boolean }) {
+  return (
+    <div className={`absolute top-3 z-[2] ${center ? "left-1/2 -translate-x-1/2 text-center" : "left-4"}`}>
+      <p className="text-[22px] leading-none font-black tracking-tighter text-cyan-300 drop-shadow-[0_0_16px_rgba(34,211,238,1)]">
+        MZ
+      </p>
+      <p className="text-[8px] font-black tracking-[0.28em] text-white/90">MOVIL ZONE</p>
+    </div>
+  );
+}
+
+function StockChip() {
+  return (
+    <span className="mb-1 w-fit rounded-full border border-cyan-300/70 bg-cyan-400/15 px-2 py-0.5 text-[9px] font-black tracking-[0.18em] text-cyan-200">
+      EN STOCK
+    </span>
+  );
+}
+
+function Feature({ label, kind }: { label: string; kind: TemplateKind }) {
+  if (kind === "hero") {
     return (
-      <div className="pointer-events-none absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-[#05070c]" />
-        <div className="absolute top-0 right-0 h-40 w-40 bg-cyan-400/15 blur-3xl" />
-        <div className="absolute bottom-16 left-0 h-32 w-32 bg-cyan-500/10 blur-3xl" />
-      </div>
-    );
-  }
-  if (kind === "frame") {
-    return (
-      <div className="pointer-events-none absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-[#070b12]" />
-        <div className="absolute top-0 right-0 h-24 w-40 bg-cyan-400" />
-        <div className="absolute top-8 right-8 h-16 w-28 bg-cyan-300/40" />
-      </div>
+      <li className="flex max-w-[31%] flex-col items-center gap-1 rounded-2xl border border-cyan-400/40 bg-black/45 px-2 py-2 text-center backdrop-blur-sm">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-400 text-xs font-black text-black">✓</span>
+        <span className="text-[9px] leading-tight font-bold tracking-wide text-white uppercase">{label}</span>
+      </li>
     );
   }
   return (
-    <div className="pointer-events-none absolute inset-0 z-0">
-      <div className="absolute inset-0 bg-[#070b12]" />
-      <div className="absolute top-0 left-[120px] h-16 w-40 rotate-[-18deg] bg-cyan-400" />
-      <div className="absolute top-8 left-[150px] h-8 w-32 rotate-[-18deg] bg-cyan-300/50" />
-    </div>
+    <li className="flex items-center gap-2 rounded-full border border-cyan-400/40 bg-black/35 px-2.5 py-1.5 backdrop-blur-sm">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-400 text-[10px] font-black text-black shadow-[0_0_12px_rgba(34,211,238,0.9)]">
+        ✓
+      </span>
+      <span className="text-[11px] leading-tight font-bold tracking-wide text-white uppercase">{label}</span>
+    </li>
   );
 }
 
@@ -130,7 +176,7 @@ export async function downloadInstagramProductCard(node: HTMLElement, fileName: 
     cacheBust: true,
     width: 540,
     height: 540,
-    backgroundColor: "#070b12",
+    backgroundColor: "#020617",
   });
   const link = document.createElement("a");
   link.download = fileName.endsWith(".jpg") ? fileName : `${fileName}.jpg`;
@@ -140,14 +186,14 @@ export async function downloadInstagramProductCard(node: HTMLElement, fileName: 
 
 function shortenTitle(title: string) {
   const value = title.trim();
-  if (value.length <= 42) return value;
-  return `${value.slice(0, 40).trim()}…`;
+  if (value.length <= 34) return value;
+  return `${value.slice(0, 32).trim()}…`;
 }
 
 function shortHeadline(value: string) {
   const text = value.trim();
-  if (text.length <= 56) return text;
-  return `${text.slice(0, 54).trim()}…`;
+  if (text.length <= 42) return text;
+  return `${text.slice(0, 40).trim()}…`;
 }
 
 function cleanFeature(value: string) {
@@ -155,5 +201,5 @@ function cleanFeature(value: string) {
     .replace(/^[\s\p{Extended_Pictographic}\p{Emoji_Presentation}]+/u, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 32);
+    .slice(0, 28);
 }
