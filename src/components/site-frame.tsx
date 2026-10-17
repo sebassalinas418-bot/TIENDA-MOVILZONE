@@ -20,7 +20,7 @@ export function PageSkyFade() {
   );
 }
 
-export function SiteFrame({ children }: { children: ReactNode }) {
+export function SiteFrame({ children, hideFooter = false }: { children: ReactNode; hideFooter?: boolean }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [session, setSession] = useState<DemoSession | null>(null);
@@ -77,7 +77,7 @@ export function SiteFrame({ children }: { children: ReactNode }) {
         <PageSkyFade />
         <div className="relative">{children}</div>
       </div>
-      <SiteFooter />
+      {hideFooter ? null : <SiteFooter />}
       <LoginPrompt
         open={loginOpen}
         onClose={() => setLoginOpen(false)}

@@ -9,7 +9,7 @@ import { SiteHeader } from "@/components/site-header";
 import { PageSkyFade } from "@/components/site-frame";
 import { SiteFooter } from "@/components/store-sections";
 import { useStoreConfig } from "@/config/store-config";
-import { brands } from "@/data/products";
+import { brands, formatPrice } from "@/data/products";
 import { overlayCatalogStock } from "@/lib/web-pending-stock/availability";
 import { storeProductGridClass } from "@/lib/store-product-grid/mobile";
 import { isStoreSoldOut } from "@/lib/store-sold-out/presentation";
@@ -326,7 +326,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
         (catalogFilter.kind === "category" &&
           parent &&
           (vis.categoryId === parent.id || vis.subcategoryId === parent.id || ids.includes(vis.categoryId)) &&
-          !onChild) ||
+          (admin || !onChild)) ||
         (catalogFilter.kind === "sub" &&
           child &&
           (vis.subcategoryId === child.id || vis.categoryId === child.id));
@@ -523,34 +523,136 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     addItem(product.id);
   }
 
-  const filters = (
-    <div className="space-y-6">
+  const productSearchField = (
+    <label className="block min-w-0 flex-1">
+      <span className="sr-only">Buscar productos</span>
+      <input
+        type="search"
+        value={query}
+        onChange={(event) => {
+          const value = event.target.value;
+          setQuery(value);
+          adminSearch?.setQuery(value);
+          if (value.trim()) {
+            setFilter({ kind: "all" });
+            setOnlyOffers(false);
+          }
+        }}
+        placeholder="Buscar producto..."
+        className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-neutral-950 outline-none placeholder:text-neutral-600 focus:border-sky-500"
+      />
+    </label>
+  );
+
+  const extraFilters = (
+    <>
       <section>
-        <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">Productos</h2>
-        <label className="mt-3 block">
-          <span className="sr-only">Buscar productos</span>
+        <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">Precio</h2>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <label>
+            <span className="sr-only">Precio mínimo</span>
+            <input
+              inputMode="numeric"
+              value={minPrice}
+              onChange={(event) => setMinPrice(event.target.value.replace(/[^\d]/g, ""))}
+              placeholder="$ mín"
+              className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-neutral-950 outline-none placeholder:text-neutral-600 focus:border-sky-500"
+            />
+          </label>
+          <label>
+            <span className="sr-only">Precio máximo</span>
+            <input
+              inputMode="numeric"
+              value={maxPrice}
+              onChange={(event) => setMaxPrice(event.target.value.replace(/[^\d]/g, ""))}
+              placeholder="$ máx"
+              className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-neutral-950 outline-none placeholder:text-neutral-600 focus:border-sky-500"
+            />
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">Marca</h2>
+          {selectedBrands.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setSelectedBrands([])}
+              className="text-xs font-medium text-sky-600"
+            >
+              Ver todas
+            </button>
+          ) : null}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {brands.map((brand) => {
+            const selected = selectedBrands.includes(brand);
+            return (
+              <button
+                key={brand}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => toggleBrand(brand)}
+                className={`rounded-xl border px-2 py-2 text-sm font-semibold transition-colors ${
+                  selected
+                    ? "border-sky-500 bg-sky-100 text-neutral-950"
+                    : "border-gray-200 bg-white text-neutral-900 hover:border-gray-300"
+                }`}
+              >
+                {brand}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">
+          Disponibilidad
+        </h2>
+        <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-neutral-900">
           <input
-            type="search"
-            value={query}
-            onChange={(event) => {
-              const value = event.target.value;
-              setQuery(value);
-              adminSearch?.setQuery(value);
-              if (value.trim()) {
-                setFilter({ kind: "all" });
-                setOnlyOffers(false);
-              }
-            }}
-            placeholder="Buscar producto..."
-            className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-neutral-950 outline-none placeholder:text-neutral-600 focus:border-sky-500"
+            type="checkbox"
+            checked={showOutOfStock}
+            onChange={(event) => setShowOutOfStock(event.target.checked)}
+            className="h-4 w-4 accent-sky-500"
           />
+          Mostrar agotados
+        </label>
+        <label className="mt-2 flex items-center gap-2 text-sm font-semibold text-neutral-900">
+          <input
+            type="checkbox"
+            checked={onlyOffers}
+            onChange={(event) => {
+              if (admin) {
+                setOnlyOffers(event.target.checked);
+                return;
+              }
+              if (event.target.checked) window.location.assign("/tienda?vista=ofertas");
+              else window.location.assign("/tienda");
+            }}
+            className="h-4 w-4 accent-sky-500"
+          />
+          En oferta
         </label>
       </section>
+    </>
+  );
+
+  const filters = (
+    <div className="space-y-4 lg:space-y-6">
+      {admin ? null : (
+      <section>
+        <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">Productos</h2>
+        <div className="mt-3">{productSearchField}</div>
+      </section>
+      )}
       <section>
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">Categoría</h2>
           {admin ? (
-            <p className="mt-1 text-[11px] font-medium leading-snug text-neutral-600">
+            <p className="mt-1 hidden text-[11px] font-medium leading-snug text-neutral-600 lg:block">
               Arrastrá un producto y soltalo en una categoría o subcategoría de la tienda. No cambia TallerGestio.
             </p>
           ) : null}
@@ -559,13 +661,13 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
           <button
             type="button"
             onClick={() => setAddingCategory(true)}
-            className="mt-3 flex w-full items-center justify-center rounded-xl border border-dashed border-sky-300 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-700 hover:bg-sky-100"
+            className="mt-2 flex w-full items-center justify-center rounded-xl border border-dashed border-sky-300 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-700 hover:bg-sky-100"
           >
             + Nueva categoría
           </button>
         ) : null}
         {admin ? (
-          <p className="mt-2 text-[11px] leading-4 text-neutral-500">
+          <p className="mt-2 hidden text-[11px] leading-4 text-neutral-500 lg:block">
             En negro: agrupadores de la tienda (se pueden borrar). En rojo: TallerGestio.
             Arrastrá para agrupar o reordenar. No cambia el taller.
           </p>
@@ -590,7 +692,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
             </button>
           </form>
         ) : null}
-        <label className="mt-3 block">
+        <label className="mt-2 block">
           <span className="sr-only">Buscar categoría</span>
           <input
             type="search"
@@ -600,7 +702,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
             className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-neutral-950 outline-none placeholder:text-neutral-600 focus:border-sky-500"
           />
         </label>
-        <ul className="mt-2 space-y-1">
+        <ul className={`mt-2 space-y-0.5 ${admin ? "max-h-[36vh] overflow-y-auto overscroll-contain pr-1 lg:max-h-[70vh]" : "space-y-1"}`}>
           <li>
             <button
               type="button"
@@ -640,7 +742,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                   }
                 }
               }}
-              className="rounded-xl border border-dashed border-red-200 bg-red-50/60 px-3 py-2 text-[11px] font-medium text-red-700"
+              className="rounded-xl border border-dashed border-red-200 bg-red-50/60 px-3 py-1.5 text-[11px] font-medium leading-snug text-red-700"
             >
               Soltá acá para dejar la categoría de TallerGestio en la raíz
             </li>
@@ -683,7 +785,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                       );
                       setFiltersOpen(false);
                     }}
-                    className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors duration-200 ${
+                    className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-left text-sm font-semibold transition-colors duration-200 ${
                       selected ? categoryActive : childOpen ? categoryBranch : categoryIdle
                     }`}
                   >
@@ -812,97 +914,17 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
         </ul>
       </section>
 
-      <section>
-        <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">Precio</h2>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <label>
-            <span className="sr-only">Precio mínimo</span>
-            <input
-              inputMode="numeric"
-              value={minPrice}
-              onChange={(event) => setMinPrice(event.target.value.replace(/[^\d]/g, ""))}
-              placeholder="$ mín"
-              className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-neutral-950 outline-none placeholder:text-neutral-600 focus:border-sky-500"
-            />
-          </label>
-          <label>
-            <span className="sr-only">Precio máximo</span>
-            <input
-              inputMode="numeric"
-              value={maxPrice}
-              onChange={(event) => setMaxPrice(event.target.value.replace(/[^\d]/g, ""))}
-              placeholder="$ máx"
-              className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-neutral-950 outline-none placeholder:text-neutral-600 focus:border-sky-500"
-            />
-          </label>
-        </div>
-      </section>
-
-      <section>
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">Marca</h2>
-          {selectedBrands.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setSelectedBrands([])}
-              className="text-xs font-medium text-sky-600"
-            >
-              Ver todas
-            </button>
-          ) : null}
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {brands.map((brand) => {
-            const selected = selectedBrands.includes(brand);
-            return (
-              <button
-                key={brand}
-                type="button"
-                aria-pressed={selected}
-                onClick={() => toggleBrand(brand)}
-                className={`rounded-xl border px-2 py-2 text-sm font-semibold transition-colors ${
-                  selected
-                    ? "border-sky-500 bg-sky-100 text-neutral-950"
-                    : "border-gray-200 bg-white text-neutral-900 hover:border-gray-300"
-                }`}
-              >
-                {brand}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">
-          Disponibilidad
-        </h2>
-        <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-neutral-900">
-          <input
-            type="checkbox"
-            checked={showOutOfStock}
-            onChange={(event) => setShowOutOfStock(event.target.checked)}
-            className="h-4 w-4 accent-sky-500"
-          />
-          Mostrar agotados
-        </label>
-        <label className="mt-2 flex items-center gap-2 text-sm font-semibold text-neutral-900">
-          <input
-            type="checkbox"
-            checked={onlyOffers}
-            onChange={(event) => {
-              if (admin) {
-                setOnlyOffers(event.target.checked);
-                return;
-              }
-              if (event.target.checked) window.location.assign("/tienda?vista=ofertas");
-              else window.location.assign("/tienda");
-            }}
-            className="h-4 w-4 accent-sky-500"
-          />
-          En oferta
-        </label>
-      </section>
+      {admin ? (
+        <>
+          <details className="rounded-xl border border-gray-200 bg-white px-3 py-2 lg:hidden">
+            <summary className="cursor-pointer text-sm font-bold text-neutral-900">Más filtros</summary>
+            <div className="mt-3 space-y-4">{extraFilters}</div>
+          </details>
+          <div className="hidden space-y-6 lg:block">{extraFilters}</div>
+        </>
+      ) : (
+        extraFilters
+      )}
     </div>
   );
 
@@ -913,6 +935,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       ? (activeCategory?.children.find((item) => item.id === filter.subcategoryId) ?? null)
       : null;
   const showSubcategoryGrid =
+    !admin &&
     !onlyOffers &&
     filter.kind === "category" &&
     Boolean(activeCategory && activeCategory.children.length > 0) &&
@@ -932,23 +955,29 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   const catalog = (
     <>
       <main className="mx-auto w-full max-w-6xl flex-1 px-2 py-3 sm:px-6 sm:py-8">
+        {admin ? (
+          <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-2 sm:border-0 sm:bg-transparent sm:p-0">
+            <div className="flex items-center gap-2">
+              {productSearchField}
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                className="shrink-0 rounded-full bg-black px-3 py-2.5 text-sm font-bold text-white hover:bg-gray-800 sm:px-4"
+              >
+                + Producto
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <h1 className="text-xl font-bold tracking-tight text-gray-900 sm:text-3xl">
             {onlyOffers ? "Ofertas" : "Nuestra tienda"}
           </h1>
-          {admin ? (
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              className="rounded-full bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800"
-            >
-              + Agregar producto nuevo
-            </button>
-          ) : null}
         </div>
+        )}
 
-        <div className={`mt-3 sm:mt-6 ${admin ? "grid gap-8 lg:grid-cols-[250px_minmax(0,1fr)]" : "lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8"}`}>
-          <aside className={admin ? "block" : "hidden lg:block"}>{filters}</aside>
+        <div className={`mt-3 sm:mt-6 ${admin ? "grid gap-3 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8" : "lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8"}`}>
+          <aside className={admin ? "block rounded-2xl border border-gray-100 bg-white p-3 lg:border-0 lg:bg-transparent lg:p-0" : "hidden lg:block"}>{filters}</aside>
 
           <div>
             <div className="flex items-center justify-between gap-3">
@@ -1156,6 +1185,35 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
             ) : null}
 
             {visibleProducts.length > 0 ? (
+              admin ? (
+                <>
+                  <ul className="mt-2 divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-100 bg-white lg:hidden">
+                    {visibleProducts.map((product) => (
+                      <AdminProductRow
+                        key={product.id}
+                        product={product}
+                        onEdit={() => setEditingId(product.id)}
+                        onDragStart={(event) => writeProductDrag(event, product.id)}
+                      />
+                    ))}
+                  </ul>
+                  <ul className={`${storeProductGridClass} max-lg:hidden`}>
+                    {visibleProducts.map((product) => (
+                      <li key={product.id} className="min-w-0">
+                        <ProductCard
+                          product={product}
+                          onAddToCart={() => handleAddToCart(product)}
+                          onEdit={canManage ? () => setEditingId(product.id) : undefined}
+                          onEditImage={canManage ? () => setImageEditId(product.id) : undefined}
+                          onToggleHidden={canManage ? () => toggleProductHidden(product.id) : undefined}
+                          draggable={admin}
+                          onDragStart={(event) => writeProductDrag(event, product.id)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
               <ul className={storeProductGridClass}>
                 {visibleProducts.map((product) => (
                   <li key={product.id} className="min-w-0">
@@ -1177,6 +1235,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                   </li>
                 ))}
               </ul>
+              )
             ) : (
               <p className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center text-base font-medium text-neutral-800">
                 No hay productos con esos filtros.
@@ -1291,6 +1350,40 @@ function TrashIcon() {
     <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.5 8h5l.5-8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+function AdminProductRow({
+  product,
+  onEdit,
+  onDragStart,
+}: {
+  product: CatalogProduct;
+  onEdit: () => void;
+  onDragStart: (event: DragEvent<HTMLElement>) => void;
+}) {
+  const soldOut = isStoreSoldOut(product);
+  return (
+    <li>
+      <button
+        type="button"
+        draggable
+        onDragStart={onDragStart}
+        onClick={onEdit}
+        className="flex w-full items-center gap-3 px-3 py-2.5 text-left active:bg-sky-50"
+      >
+        <img src={product.image} alt="" className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-neutral-950">{product.title}</span>
+          <span className="mt-0.5 block text-xs font-medium text-neutral-500">
+            {formatPrice(product.salePrice)}
+            {soldOut ? " · Agotado" : ""}
+            {product.storeHidden ? " · Oculto" : ""}
+          </span>
+        </span>
+        <span className="shrink-0 rounded-full bg-sky-500 px-3 py-1 text-xs font-bold text-white">Editar</span>
+      </button>
+    </li>
   );
 }
 

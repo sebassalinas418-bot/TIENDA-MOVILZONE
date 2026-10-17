@@ -94,18 +94,20 @@ export function AdminOrders() {
 
   return (
     <AdminCatalogSearchProvider initialQuery={searchQ}>
-    <SiteFrame>
-      <header>
-        <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-          <p className="text-xs font-semibold tracking-[0.16em] text-sky-600 uppercase">Administración</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-neutral-950">{sectionCopy[section].title}</h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-gray-600">{sectionCopy[section].text}</p>
-          <div className="mt-6 flex flex-wrap gap-2">
+    <SiteFrame hideFooter>
+      <header className="border-b border-gray-100 bg-white/90">
+        <div className="mx-auto w-full max-w-6xl px-3 py-3 sm:px-6 sm:py-5">
+          <p className="text-[10px] font-semibold tracking-[0.16em] text-sky-600 uppercase sm:text-xs">Administración</p>
+          <h1 className="mt-0.5 text-lg font-bold tracking-tight text-neutral-950 sm:mt-2 sm:text-3xl">
+            {sectionCopy[section].title}
+          </h1>
+          <p className="mt-1 hidden max-w-xl text-sm leading-6 text-gray-600 sm:mt-3 sm:block">{sectionCopy[section].text}</p>
+          <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5 sm:mt-6 sm:flex-wrap sm:gap-2">
             {(
               [
+                ["tienda", "Tienda"],
                 ["pedidos", "Pedidos"],
                 ["negocio", "Negocio"],
-                ["tienda", "Tienda"],
                 ["correos", "Correos"],
                 ["redes", "Redes"],
               ] as const
@@ -114,7 +116,7 @@ export function AdminOrders() {
                 key={id}
                 type="button"
                 onClick={() => setSection(id)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                className={`shrink-0 rounded-full px-3.5 py-2 text-sm font-semibold ${
                   section === id ? "bg-sky-500 text-white" : "bg-neutral-950 text-white hover:bg-neutral-800"
                 }`}
               >
