@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, type DragEvent, type MouseEvent } from "react";
+import { type DragEvent, type MouseEvent } from "react";
+import { useRouter } from "next/navigation";
 import { formatPrice } from "@/data/products";
 import type { CatalogProduct } from "@/lib/offers";
-import { ProductPreviewModal } from "@/components/product-preview-modal";
 import { useFavorite } from "@/lib/store-favorites/use-favorite";
 import { isStoreSoldOut, SOLD_OUT_LABEL, soldOutStrikeClass } from "@/lib/store-sold-out/presentation";
+import { storeProductPath } from "@/lib/store-product-path";
 
 type ProductCardProps = {
   product: CatalogProduct;
@@ -26,21 +27,21 @@ export function ProductCard({
   draggable,
   onDragStart,
 }: ProductCardProps) {
+  const router = useRouter();
   const { on: favorite, toggle: toggleFavorite } = useFavorite(product.id);
-  const [preview, setPreview] = useState(false);
   const hidden = Boolean(product.storeHidden);
   const soldOut = isStoreSoldOut(product);
 
-  function openPreview(event: MouseEvent<HTMLElement>) {
+  function openProduct(event: MouseEvent<HTMLElement>) {
     if ((event.target as HTMLElement).closest("[data-card-control]")) return;
-    setPreview(true);
+    router.push(storeProductPath(product.id));
   }
 
   return (
     <article
       draggable={draggable}
       onDragStart={onDragStart}
-      onClick={openPreview}
+      onClick={openProduct}
       className={`relative flex h-full min-w-0 cursor-pointer flex-col rounded-lg border bg-white p-1.5 shadow-sm transition-shadow duration-300 hover:shadow-md sm:rounded-2xl sm:p-3 ${
         hidden ? "border-dashed border-neutral-300" : "border-gray-100"
       } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
@@ -188,13 +189,6 @@ export function ProductCard({
       >
         <CartIcon />
       </button>
-      {preview ? (
-        <ProductPreviewModal
-          product={product}
-          onClose={() => setPreview(false)}
-          onAddToCart={onAddToCart}
-        />
-      ) : null}
     </article>
   );
 }

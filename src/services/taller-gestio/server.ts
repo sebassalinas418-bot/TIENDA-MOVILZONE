@@ -124,6 +124,33 @@ export async function readTallerCatalog(): Promise<Product[] | null> {
     .filter((product) => product.title.trim().length > 0);
 }
 
+/** Lectura aislada: 4–5 productos de la misma categoría, sin el actual. */
+export async function readRelatedTallerProductIds(input: {
+  excludeId: string;
+  category: string;
+  limit?: number;
+}): Promise<string[] | null> {
+  const client = adminClient();
+  if (!client) return null;
+  const shopId = await resolveShopId(client);
+  if (!shopId) return [];
+  const excludeId = input.excludeId.trim();
+  const category = input.category.trim();
+  const limit = Math.min(5, Math.max(1, Math.floor(input.limit ?? 5)));
+  if (!excludeId || !category) return [];
+  const { data, error } = await client
+    .from("products")
+    .select("id")
+    .eq("shop_id", shopId)
+    .eq("is_active", true)
+    .ilike("category", category)
+    .neq("id", excludeId)
+    .order("name", { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => String((row as { id: string }).id)).filter(Boolean);
+}
+
 async function shopActor(client: SupabaseClient, shopId: string) {
   const { data, error } = await client
     .from("shop_members")
