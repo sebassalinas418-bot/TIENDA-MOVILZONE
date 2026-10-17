@@ -57,11 +57,25 @@ function firstEnv(names: readonly string[]) {
 }
 
 export function socialGeminiKey() {
-  return firstEnv(["NEXT_PUBLIC_GEMINI_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY"]);
+  hydrateFromFiles();
+  return (
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY?.trim() ||
+    process.env.GEMINI_API_KEY?.trim() ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ||
+    process.env.GOOGLE_API_KEY?.trim() ||
+    firstEnv(["NEXT_PUBLIC_GEMINI_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY"])
+  ).replace(/\s+/g, "");
 }
 
 export function serverGeminiKey() {
-  return firstEnv(["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY", "NEXT_PUBLIC_GEMINI_API_KEY"]);
+  hydrateFromFiles();
+  return (
+    process.env.GEMINI_API_KEY?.trim() ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ||
+    process.env.GOOGLE_API_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY?.trim() ||
+    firstEnv(["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY", "NEXT_PUBLIC_GEMINI_API_KEY"])
+  ).replace(/\s+/g, "");
 }
 
 export function socialOpenAiKey() {
