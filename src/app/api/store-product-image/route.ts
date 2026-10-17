@@ -5,7 +5,7 @@ import { canAccessStoreRedesRequest } from "@/lib/store-redes/access";
 import { isSharedProductImage } from "@/lib/store-product-images/public-url";
 
 const BUCKET = "product-images";
-const MAX_BYTES = 3 * 1024 * 1024;
+const MAX_BYTES = 20 * 1024 * 1024;
 const TYPES: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",

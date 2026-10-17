@@ -1,10 +1,14 @@
 import { prepareProductImageFile } from "@/lib/admin-image-tools/prepare-product-image";
 import { isPersistableProductImage } from "@/lib/store-product-images/public-url";
 
-export async function uploadStoreProductImage(file: File, productId?: string) {
-  const prepared = await prepareProductImageFile(file);
+export async function uploadStoreProductImage(
+  file: File,
+  productId?: string,
+  options?: { asIs?: boolean },
+) {
+  const payload = options?.asIs ? file : await prepareProductImageFile(file);
   const body = new FormData();
-  body.append("file", prepared);
+  body.append("file", payload);
   if (productId) body.append("productId", productId);
   const response = await fetch("/api/store-product-image", {
     method: "POST",

@@ -3,12 +3,8 @@
 import { useState, type ReactNode } from "react";
 import { useStoreConfig } from "@/config/store-config";
 import { brands, formatPrice } from "@/data/products";
-import { isolateProductFile } from "@/lib/admin-image-tools/isolate-product";
-import { prepareProductImageFile } from "@/lib/admin-image-tools/prepare-product-image";
-import {
-  uploadStoreProductImage,
-  uploadStoreProductImageFromDataUrl,
-} from "@/lib/store-product-images/client-upload";
+import { removeProductImageBackground } from "@/lib/admin-image-tools/remove-product-image-background";
+import { uploadStoreProductImage } from "@/lib/store-product-images/client-upload";
 import { isPersistableProductImage } from "@/lib/store-product-images/public-url";
 import { quotePrice, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
 
@@ -384,38 +380,53 @@ function ImagePicker({
   autoIsolate?: boolean;
   productId?: string;
 }) {
-  const [reading, setReading] = useState(false);
+  const [busy, setBusy] = useState<"idle" | "upload" | "cut">("idle");
+  const reading = busy !== "idle";
 
-  async function onFile(file: File | undefined) {
+  async function uploadAsIs(file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       onError("Elegí un archivo de imagen.");
       return;
     }
-    setReading(true);
+    setBusy("upload");
     onError("");
     try {
-      if (!autoIsolate) {
-        onChange(await uploadStoreProductImage(file, productId));
-        return;
-      }
-      try {
-        const isolated = await isolateProductFile(file);
-        onChange(
-          isolated.startsWith("data:")
-            ? await uploadStoreProductImageFromDataUrl(isolated, productId)
-            : isolated.startsWith("http")
-              ? isolated
-              : await uploadStoreProductImage(file, productId),
-        );
-      } catch {
-        onChange(await uploadStoreProductImage(await prepareProductImageFile(file), productId));
-        onError("Se usó la foto original porque no se pudo quitar el fondo.");
-      }
+      onChange(await uploadStoreProductImage(file, productId, { asIs: true }));
     } catch (err) {
       onError(err instanceof Error ? err.message : "No se pudo subir esa imagen a Storage.");
     } finally {
-      setReading(false);
+      setBusy("idle");
+    }
+  }
+
+  async function captureAndRemoveBackground(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      onError("Elegí un archivo de imagen.");
+      return;
+    }
+    setBusy("cut");
+    onError("");
+    try {
+      const cut = await removeProductImageBackground(file, { alreadyPrepared: true });
+      setBusy("upload");
+      onChange(await uploadStoreProductImage(cut, productId, { asIs: true }));
+    } catch (cutError) {
+      try {
+        onChange(await uploadStoreProductImage(file, productId, { asIs: true }));
+        onError("Se usó la foto original porque no se pudo quitar el fondo.");
+      } catch (err) {
+        onError(
+          cutError instanceof Error
+            ? cutError.message
+            : err instanceof Error
+              ? err.message
+              : "No se pudo recortar ni subir esa imagen.",
+        );
+      }
+    } finally {
+      setBusy("idle");
     }
   }
 
@@ -428,7 +439,7 @@ function ImagePicker({
       </div>
       {autoIsolate ? (
         <label className="mt-3 flex cursor-pointer items-center justify-center rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400">
-          {reading ? "Quitando fondo con IA..." : "Sacar foto y quitar fondo"}
+          {busy === "cut" ? "Recortando fondo..." : busy === "upload" ? "Subiendo foto..." : "Sacar foto y quitar fondo"}
           <input
             type="file"
             accept="image/*"
@@ -438,7 +449,7 @@ function ImagePicker({
             onChange={(event) => {
               const file = event.target.files?.[0];
               event.target.value = "";
-              void onFile(file);
+              void captureAndRemoveBackground(file);
             }}
           />
         </label>
@@ -450,7 +461,7 @@ function ImagePicker({
             : "bg-sky-500 text-white hover:bg-sky-400"
         }`}
       >
-          {reading ? (autoIsolate ? "Subiendo foto..." : "Subiendo imagen...") : "Subir imagen"}
+          {busy === "upload" ? "Subiendo imagen..." : "Subir imagen"}
         <input
           type="file"
           accept="image/*"
@@ -459,7 +470,7 @@ function ImagePicker({
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = "";
-            void onFile(file);
+            void uploadAsIs(file);
           }}
         />
       </label>
