@@ -17,7 +17,11 @@ import { useCatalog, type CatalogProduct } from "@/lib/offers";
 import { storeVisibleCategory } from "@/lib/store-product-placements";
 import { useCart } from "@/lib/cart";
 import { useOrders } from "@/lib/orders";
-import { useAdminCatalogSearch } from "@/lib/admin-catalog-search";
+import {
+  ADMIN_CATALOG_FILTER_EVENT,
+  useAdminCatalogSearch,
+  type AdminCatalogFilter,
+} from "@/lib/admin-catalog-search";
 import { useAdminAccess } from "@/lib/admin-access";
 import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
 import { storeSearchPath } from "@/lib/store-search-path";
@@ -238,6 +242,23 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       setOnlyOffers(false);
     }
   }, [admin, adminSearch?.query]);
+
+  useEffect(() => {
+    if (!admin) return;
+    const onPick = (event: Event) => {
+      const detail = (event as CustomEvent<AdminCatalogFilter>).detail;
+      if (!detail) return;
+      setQuery("");
+      adminSearch?.setQuery("");
+      setOnlyOffers(false);
+      setFilter(detail);
+      if (detail.kind !== "all") {
+        setExpanded((current) => (current.includes(detail.categoryId) ? current : [...current, detail.categoryId]));
+      }
+    };
+    window.addEventListener(ADMIN_CATALOG_FILTER_EVENT, onPick);
+    return () => window.removeEventListener(ADMIN_CATALOG_FILTER_EVENT, onPick);
+  }, [admin, adminSearch]);
 
   useEffect(() => {
     if (admin) return;
@@ -977,9 +998,9 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
         )}
 
         <div className={`mt-3 sm:mt-6 ${admin ? "grid gap-3 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8" : "lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8"}`}>
-          <aside className={admin ? "order-2 block rounded-2xl border border-gray-100 bg-white p-3 lg:order-1 lg:border-0 lg:bg-transparent lg:p-0" : "hidden lg:block"}>{filters}</aside>
+          <aside className="hidden lg:block">{filters}</aside>
 
-          <div className={admin ? "order-1 lg:order-2" : undefined}>
+          <div>
             <div className="flex items-center justify-between gap-3">
               {admin ? null : (
               <button

@@ -11,6 +11,7 @@ import {
 import { usePathname } from "next/navigation";
 import { LoginPrompt } from "@/components/login-prompt";
 import { useStoreConfig } from "@/config/store-config";
+import { emitAdminCatalogFilter } from "@/lib/admin-catalog-search";
 import { readSession } from "@/lib/session";
 
 const MobileNavContext = createContext<{ openDrawer: () => void } | null>(null);
@@ -60,7 +61,9 @@ function MobileChromeLive({
     onCloseDrawer();
   }, [pathname]);
 
-  if (pathname.startsWith("/admin")) return null;
+  if (pathname.startsWith("/admin")) {
+    return <MobileDrawer open={drawerOpen} onClose={onCloseDrawer} admin />;
+  }
 
   return (
     <>
@@ -98,9 +101,6 @@ export function MobileMenuButton() {
 }
 
 function MobileMenuButtonLive({ openDrawer }: { openDrawer: () => void }) {
-  const pathname = usePathname();
-  if (pathname.startsWith("/admin")) return null;
-
   return (
     <button
       type="button"
@@ -113,7 +113,7 @@ function MobileMenuButtonLive({ openDrawer }: { openDrawer: () => void }) {
   );
 }
 
-function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+function MobileDrawer({ open, onClose, admin = false }: { open: boolean; onClose: () => void; admin?: boolean }) {
   const { config } = useStoreConfig();
   const [tab, setTab] = useState<"categorias" | "menu">("categorias");
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -137,6 +137,20 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
   function go(href: string) {
     onClose();
     window.location.assign(href);
+  }
+
+  function pickCategory(next: Parameters<typeof emitAdminCatalogFilter>[0]) {
+    if (admin) {
+      emitAdminCatalogFilter(next);
+      onClose();
+      return;
+    }
+    if (next.kind === "all") go("/tienda");
+    else if (next.kind === "sub") {
+      go(`/tienda?categoria=${encodeURIComponent(next.categoryId)}&sub=${encodeURIComponent(next.subcategoryId)}`);
+    } else {
+      go(`/tienda?categoria=${encodeURIComponent(next.categoryId)}`);
+    }
   }
 
   return (
@@ -165,6 +179,11 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
           </button>
         </div>
 
+        {admin ? (
+          <p className="border-b border-white/10 px-4 py-3 text-[11px] font-bold tracking-[0.14em] text-white">
+            CATEGORÍAS
+          </p>
+        ) : (
         <div className="grid grid-cols-2 border-b border-white/10 px-4">
           <button
             type="button"
@@ -185,10 +204,22 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
             MENÚ
           </button>
         </div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {tab === "categorias" ? (
+          {tab === "categorias" || admin ? (
             <ul>
+              {admin ? (
+                <li className="border-b border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => pickCategory({ kind: "all" })}
+                    className="w-full px-4 py-3.5 text-left text-[13px] font-semibold tracking-wide uppercase"
+                  >
+                    Todos los productos
+                  </button>
+                </li>
+              ) : null}
               {config.categories.map((item) => {
                 const open = expanded.includes(item.id);
                 const hasChildren = item.children.length > 0;
@@ -197,7 +228,7 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
                     <div className="flex items-stretch">
                       <button
                         type="button"
-                        onClick={() => go(`/tienda?categoria=${encodeURIComponent(item.id)}`)}
+                        onClick={() => pickCategory({ kind: "category", categoryId: item.id })}
                         className="flex-1 px-4 py-3.5 text-left text-[13px] font-semibold tracking-wide uppercase"
                       >
                         {item.name}
@@ -227,9 +258,11 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
                             <button
                               type="button"
                               onClick={() =>
-                                go(
-                                  `/tienda?categoria=${encodeURIComponent(item.id)}&sub=${encodeURIComponent(child.id)}`,
-                                )
+                                pickCategory({
+                                  kind: "sub",
+                                  categoryId: item.id,
+                                  subcategoryId: child.id,
+                                })
                               }
                               className="w-full px-6 py-2.5 text-left text-sm font-medium text-white/80"
                             >
