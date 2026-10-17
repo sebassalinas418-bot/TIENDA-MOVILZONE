@@ -13,7 +13,7 @@ type StoreProductImageFieldProps = {
   disabled?: boolean;
 };
 
-type ProcessStage = "idle" | "compressing" | "processing" | "uploading";
+type ProcessStage = "idle" | "awaiting" | "compressing" | "processing" | "uploading";
 
 function cn(...parts: Array<string | false | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -35,92 +35,121 @@ export function StoreProductImageField({
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(value || null);
   const [stage, setStage] = useState<ProcessStage>("idle");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processHint, setProcessHint] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
 
   useEffect(() => {
+    if (stage === "awaiting") return;
     setPreview(value || null);
-  }, [value]);
+  }, [value, stage]);
 
   function reportError(message: string) {
     setError(message);
     onError?.(message);
   }
 
-  async function handleFile(file: File) {
+  function stagePendingFile(file: File) {
+    if (!file.type.startsWith("image/")) {
+      reportError("Elegí un archivo de imagen.");
+      return;
+    }
     setError(null);
     setProcessHint(null);
     onError?.("");
-    setStage("compressing");
+    setPendingFile(file);
+    setPreview((current) => {
+      if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+      return URL.createObjectURL(file);
+    });
+    setStage("awaiting");
+    setProcessHint("¿Querés quitar el fondo de esta foto?");
+  }
 
-    const objectUrl = URL.createObjectURL(file);
-    setPreview(objectUrl);
-    let previewObjectUrl: string | null = objectUrl;
+  async function commitPending(removeBackground: boolean) {
+    const file = pendingFile;
+    if (!file) return;
+    setError(null);
+    onError?.("");
+    setStage("compressing");
+    let previewObjectUrl = preview?.startsWith("blob:") ? preview : null;
 
     try {
       const prepared = await prepareProductImageFile(file);
-
-      setStage("processing");
       let fileToUpload = prepared;
       let backgroundRemoved = false;
 
-      try {
-        const processed = await removeProductImageBackground(prepared, {
-          alreadyPrepared: true,
-        });
-        fileToUpload = processed;
-        backgroundRemoved = true;
-        URL.revokeObjectURL(previewObjectUrl);
-        previewObjectUrl = URL.createObjectURL(processed);
-        setPreview(previewObjectUrl);
-      } catch (processError) {
-        const message =
-          processError instanceof Error ? processError.message : "No se pudo eliminar el fondo.";
-        setProcessHint(`Se usará la foto original (sin quitar fondo): ${message}`);
+      if (removeBackground) {
+        setStage("processing");
+        try {
+          const processed = await removeProductImageBackground(prepared, {
+            alreadyPrepared: true,
+          });
+          fileToUpload = processed;
+          backgroundRemoved = true;
+          if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+          previewObjectUrl = URL.createObjectURL(processed);
+          setPreview(previewObjectUrl);
+        } catch (processError) {
+          const message =
+            processError instanceof Error ? processError.message : "No se pudo eliminar el fondo.";
+          setProcessHint(`Se usará la foto original (sin quitar fondo): ${message}`);
+        }
       }
 
       setStage("uploading");
       const url = await uploadStoreProductImage(fileToUpload, productId, { asIs: true });
+      setPendingFile(null);
       onChange(url);
       setPreview(url);
-
-      if (backgroundRemoved) {
-        setProcessHint("Fondo eliminado · imagen lista para guardar.");
-      }
+      setProcessHint(
+        backgroundRemoved
+          ? "Fondo eliminado · imagen lista para guardar."
+          : "Foto subida sin recortar el fondo.",
+      );
     } catch (uploadError) {
       setPreview(value || null);
+      setPendingFile(null);
       reportError(uploadError instanceof Error ? uploadError.message : "No se pudo subir la imagen.");
     } finally {
       if (previewObjectUrl?.startsWith("blob:")) URL.revokeObjectURL(previewObjectUrl);
-      if (objectUrl.startsWith("blob:") && objectUrl !== previewObjectUrl) URL.revokeObjectURL(objectUrl);
       setStage("idle");
     }
   }
 
   function handleInputChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (file) void handleFile(file);
+    if (file) stagePendingFile(file);
     event.target.value = "";
   }
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setDragActive(false);
-    if (disabled || stage !== "idle") return;
+    if (disabled || (stage !== "idle" && stage !== "awaiting")) return;
     const file = event.dataTransfer.files?.[0];
-    if (file) void handleFile(file);
+    if (file) stagePendingFile(file);
   }
 
   function clearImage() {
-    onChange("");
-    setPreview(null);
+    if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
+    setPendingFile(null);
     setError(null);
     setProcessHint(null);
     onError?.("");
+    if (stage === "awaiting") {
+      setStage("idle");
+      setPreview(value || null);
+      return;
+    }
+    setStage("idle");
+    onChange("");
+    setPreview(null);
   }
 
-  const busy = stage !== "idle";
+  const awaiting = stage === "awaiting";
+  const busy = stage !== "idle" && !awaiting;
   const stageLabel =
     stage === "compressing"
       ? "Comprimiendo…"
@@ -134,8 +163,8 @@ export function StoreProductImageField({
     <div className="space-y-2">
       <p className="text-sm font-medium text-slate-900">Foto del producto (POS)</p>
       <p className="text-xs text-slate-500">
-        JPG, PNG o WebP · hasta 20 MB · se comprime y se quita el fondo en tu dispositivo (gratis, sin
-        OpenAI). Si el recorte falla, igual se guarda la foto original.
+        JPG, PNG o WebP · hasta 20 MB. Primero ves la foto y elegís si querés quitar el fondo (en tu
+        dispositivo, gratis) o subirla tal cual.
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
@@ -241,6 +270,26 @@ export function StoreProductImageField({
             >
               Sacá una foto
             </button>
+            {awaiting ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void commitPending(true)}
+                  disabled={disabled}
+                  className="inline-flex items-center rounded-lg bg-sky-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-sky-400"
+                >
+                  Quitar fondo y subir
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void commitPending(false)}
+                  disabled={disabled}
+                  className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+                >
+                  Subir así
+                </button>
+              </>
+            ) : null}
             {preview ? (
               <button
                 type="button"
@@ -260,7 +309,11 @@ export function StoreProductImageField({
             <p
               className={cn(
                 "inline-flex items-start gap-1.5 text-xs",
-                processHint.toLowerCase().includes("original") ? "text-amber-700" : "text-emerald-700",
+                processHint.includes("¿Querés")
+                  ? "text-slate-700"
+                  : processHint.toLowerCase().includes("original")
+                    ? "text-amber-700"
+                    : "text-emerald-700",
               )}
             >
               <svg viewBox="0 0 20 20" className="mt-0.5 size-3.5 shrink-0" fill="currentColor" aria-hidden="true">
