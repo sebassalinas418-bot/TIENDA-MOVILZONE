@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { StoreProductImageField } from "@/components/store-product-image-field";
 import { useStoreConfig } from "@/config/store-config";
 import { brands, formatPrice } from "@/data/products";
-import { removeProductImageBackground } from "@/lib/admin-image-tools/remove-product-image-background";
-import { uploadStoreProductImage } from "@/lib/store-product-images/client-upload";
 import { isPersistableProductImage } from "@/lib/store-product-images/public-url";
 import { quotePrice, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
 
@@ -367,10 +366,8 @@ function OfferFields({
 
 function ImagePicker({
   value,
-  error,
   onChange,
   onError,
-  autoIsolate = false,
   productId,
 }: {
   value: string;
@@ -380,106 +377,7 @@ function ImagePicker({
   autoIsolate?: boolean;
   productId?: string;
 }) {
-  const [busy, setBusy] = useState<"idle" | "upload" | "cut">("idle");
-  const reading = busy !== "idle";
-
-  async function uploadAsIs(file: File | undefined) {
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      onError("Elegí un archivo de imagen.");
-      return;
-    }
-    setBusy("upload");
-    onError("");
-    try {
-      onChange(await uploadStoreProductImage(file, productId, { asIs: true }));
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "No se pudo subir esa imagen a Storage.");
-    } finally {
-      setBusy("idle");
-    }
-  }
-
-  async function captureAndRemoveBackground(file: File | undefined) {
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      onError("Elegí un archivo de imagen.");
-      return;
-    }
-    setBusy("cut");
-    onError("");
-    try {
-      const cut = await removeProductImageBackground(file, { alreadyPrepared: true });
-      setBusy("upload");
-      onChange(await uploadStoreProductImage(cut, productId, { asIs: true }));
-    } catch (cutError) {
-      try {
-        onChange(await uploadStoreProductImage(file, productId, { asIs: true }));
-        onError("Se usó la foto original porque no se pudo quitar el fondo.");
-      } catch (err) {
-        onError(
-          cutError instanceof Error
-            ? cutError.message
-            : err instanceof Error
-              ? err.message
-              : "No se pudo recortar ni subir esa imagen.",
-        );
-      }
-    } finally {
-      setBusy("idle");
-    }
-  }
-
-  return (
-    <div>
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-        <div className="flex aspect-square max-h-56 items-center justify-center bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0]">
-          {value ? <img src={value} alt="" className="h-full w-full object-contain" /> : null}
-        </div>
-      </div>
-      {autoIsolate ? (
-        <label className="mt-3 flex cursor-pointer items-center justify-center rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400">
-          {busy === "cut" ? "Recortando fondo..." : busy === "upload" ? "Subiendo foto..." : "Sacar foto y quitar fondo"}
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="sr-only"
-            disabled={reading}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              void captureAndRemoveBackground(file);
-            }}
-          />
-        </label>
-      ) : null}
-      <label
-        className={`mt-3 flex cursor-pointer items-center justify-center rounded-full px-4 py-2.5 text-sm font-bold ${
-          autoIsolate
-            ? "border border-gray-200 bg-white text-gray-800 hover:bg-gray-50"
-            : "bg-sky-500 text-white hover:bg-sky-400"
-        }`}
-      >
-          {busy === "upload" ? "Subiendo imagen..." : "Subir imagen"}
-        <input
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          disabled={reading}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            void uploadAsIs(file);
-          }}
-        />
-      </label>
-      {value.startsWith("https://") ? (
-        <p className="mt-2 text-xs text-gray-500">Foto en Storage. Se ve en celular y escritorio.</p>
-      ) : null}
-      {error ? <p className="mt-2 text-sm font-medium text-rose-700">{error}</p> : null}
-    </div>
-  );
+  return <StoreProductImageField value={value} onChange={onChange} onError={onError} productId={productId} />;
 }
 
 export function SubcategoryImageModal({
