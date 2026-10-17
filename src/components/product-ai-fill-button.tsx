@@ -14,25 +14,40 @@ export type ProductAiFillResult = {
 
 type ProductAiFillButtonProps = {
   image: string;
+  pendingFile?: File | null;
   categories: { id: string; name: string; children: { id: string; name: string }[] }[];
   onResult: (result: ProductAiFillResult) => void;
 };
 
-export function ProductAiFillButton({ image, categories, onResult }: ProductAiFillButtonProps) {
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("No se pudo leer la foto."));
+    reader.readAsDataURL(file);
+  });
+}
+
+export function ProductAiFillButton({ image, pendingFile, categories, onResult }: ProductAiFillButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const ready = isSharedProductImage(image);
+  const ready = Boolean(pendingFile) || isSharedProductImage(image) || image.startsWith("data:image/");
 
   async function run() {
     if (!ready || busy) return;
     setBusy(true);
     setError("");
     try {
+      const payload = pendingFile
+        ? { imageBase64: await fileToDataUrl(pendingFile), mimeType: pendingFile.type }
+        : image.startsWith("data:image/")
+          ? { imageBase64: image }
+          : { imageUrl: image.trim() };
       const response = await fetch("/api/recognize-product", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: image.trim() }),
+        body: JSON.stringify(payload),
       });
       const body = (await response.json()) as {
         ok?: boolean;
@@ -69,10 +84,10 @@ export function ProductAiFillButton({ image, categories, onResult }: ProductAiFi
         className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-fuchsia-600 to-sky-500 px-4 text-sm font-bold text-white shadow-sm transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:from-neutral-300 disabled:to-neutral-300 disabled:text-neutral-500"
       >
         <SparklesIcon />
-        {busy ? "Analizando producto con IA..." : "Completar datos con IA"}
+        {busy ? "Analizando..." : "✨ Autocompletar datos con IA"}
       </button>
       {!ready ? (
-        <p className="mt-1.5 text-xs text-neutral-500">Subí una foto del producto para habilitar la IA.</p>
+        <p className="mt-1.5 text-xs text-neutral-500">Elegí o subí una foto del producto para habilitar la IA.</p>
       ) : null}
       {error ? <p className="mt-1.5 text-xs font-medium text-rose-600">{error}</p> : null}
     </div>

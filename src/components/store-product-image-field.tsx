@@ -9,6 +9,7 @@ type StoreProductImageFieldProps = {
   value: string;
   onChange: (url: string) => void;
   onError?: (message: string) => void;
+  onPendingFile?: (file: File | null) => void;
   productId?: string;
   disabled?: boolean;
 };
@@ -28,6 +29,7 @@ export function StoreProductImageField({
   value,
   onChange,
   onError,
+  onPendingFile,
   productId,
   disabled = false,
 }: StoreProductImageFieldProps) {
@@ -59,6 +61,7 @@ export function StoreProductImageField({
     setProcessHint(null);
     onError?.("");
     setPendingFile(file);
+    onPendingFile?.(file);
     setPreview((current) => {
       if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
       return URL.createObjectURL(file);
@@ -101,6 +104,7 @@ export function StoreProductImageField({
       setStage("uploading");
       const url = await uploadStoreProductImage(fileToUpload, productId, { asIs: true });
       setPendingFile(null);
+      onPendingFile?.(null);
       onChange(url);
       setPreview(url);
       setProcessHint(
@@ -111,6 +115,7 @@ export function StoreProductImageField({
     } catch (uploadError) {
       setPreview(value || null);
       setPendingFile(null);
+      onPendingFile?.(null);
       reportError(uploadError instanceof Error ? uploadError.message : "No se pudo subir la imagen.");
     } finally {
       if (previewObjectUrl?.startsWith("blob:")) URL.revokeObjectURL(previewObjectUrl);
@@ -135,6 +140,7 @@ export function StoreProductImageField({
   function clearImage() {
     if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
     setPendingFile(null);
+    onPendingFile?.(null);
     setError(null);
     setProcessHint(null);
     onError?.("");

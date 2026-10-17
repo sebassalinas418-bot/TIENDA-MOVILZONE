@@ -12,6 +12,7 @@ export async function POST(request: Request) {
     stock?: number;
     category?: string;
     image?: string;
+    details?: string;
   };
   if (!body.title?.trim() || typeof body.price !== "number" || typeof body.stock !== "number") {
     return Response.json({ ok: false }, { status: 400 });
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
       stock: body.stock,
       category: body.category?.trim() || "Otros",
       image: body.image,
+      details: typeof body.details === "string" ? body.details : undefined,
     });
     return Response.json(result, { status: result.ok ? 200 : 409 });
   } catch {

@@ -45,6 +45,7 @@ export function ProductEditModal({
   const [stockValue, setStockValue] = useState(String(stock));
   const [image, setImage] = useState(product.image);
   const [imageError, setImageError] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<OfferDraft>(draftFrom(offer));
   const category = config.categories.find((item) => item.id === categoryId) ?? config.categories[0];
   const numericPrice = Number(price);
@@ -83,11 +84,13 @@ export function ProductEditModal({
           error={imageError}
           onChange={setImage}
           onError={setImageError}
+          onPendingFile={setPendingFile}
           autoIsolate
           productId={product.id}
         />
         <ProductAiFillButton
           image={image}
+          pendingFile={pendingFile}
           categories={config.categories}
           onResult={(result) => {
             if (result.title) setTitle(result.title);
@@ -145,7 +148,7 @@ export function ProductEditModal({
           <textarea
             value={details}
             onChange={(event) => setDetails(event.target.value)}
-            rows={5}
+            rows={4}
             className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
           />
         </label>
@@ -203,6 +206,7 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
   const [image, setImage] = useState(config.categories[0]?.image ?? "/categories/todo.jpg");
   const [imageError, setImageError] = useState("");
   const [details, setDetails] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const category = config.categories.find((item) => item.id === categoryId) ?? config.categories[0];
   const numericPrice = Number(price);
   const numericStock = Number(stock);
@@ -259,10 +263,19 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
             }
           }}
           onSubcategory={setSubcategoryId}
+          details={details}
+          onDetails={setDetails}
         />
-        <ImagePicker value={image} error={imageError} onChange={setImage} onError={setImageError} />
+        <ImagePicker
+          value={image}
+          error={imageError}
+          onChange={setImage}
+          onError={setImageError}
+          onPendingFile={setPendingFile}
+        />
         <ProductAiFillButton
           image={image}
+          pendingFile={pendingFile}
           categories={config.categories}
           onResult={(result) => {
             if (result.title) setTitle(result.title);
@@ -273,15 +286,6 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
             if (result.details) setDetails(result.details);
           }}
         />
-        <label className="block text-sm">
-          <span className="font-medium text-gray-700">Detalles del producto</span>
-          <textarea
-            value={details}
-            onChange={(event) => setDetails(event.target.value)}
-            rows={5}
-            className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
-          />
-        </label>
         <OfferFields price={Number.isFinite(numericPrice) ? numericPrice : 0} draft={draft} onChange={setDraft} />
         <div className="flex gap-2">
           <button
@@ -311,6 +315,7 @@ function CreateFields(props: {
   brand: string;
   categoryId: string;
   subcategoryId: string;
+  details: string;
   categories: { id: string; name: string; children: { id: string; name: string }[] }[];
   onTitle: (value: string) => void;
   onPrice: (value: string) => void;
@@ -318,6 +323,7 @@ function CreateFields(props: {
   onBrand: (value: string) => void;
   onCategory: (value: string) => void;
   onSubcategory: (value: string) => void;
+  onDetails: (value: string) => void;
 }) {
   const category = props.categories.find((item) => item.id === props.categoryId);
   return (
@@ -390,6 +396,15 @@ function CreateFields(props: {
             </option>
           ))}
         </select>
+      </label>
+      <label className="block text-sm sm:col-span-2">
+        <span className="font-medium text-gray-700">Detalles del producto</span>
+        <textarea
+          value={props.details}
+          onChange={(event) => props.onDetails(event.target.value)}
+          rows={4}
+          className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
+        />
       </label>
     </div>
   );
@@ -468,16 +483,26 @@ function ImagePicker({
   value,
   onChange,
   onError,
+  onPendingFile,
   productId,
 }: {
   value: string;
   error: string;
   onChange: (value: string) => void;
   onError: (value: string) => void;
+  onPendingFile?: (file: File | null) => void;
   autoIsolate?: boolean;
   productId?: string;
 }) {
-  return <StoreProductImageField value={value} onChange={onChange} onError={onError} productId={productId} />;
+  return (
+    <StoreProductImageField
+      value={value}
+      onChange={onChange}
+      onError={onError}
+      onPendingFile={onPendingFile}
+      productId={productId}
+    />
+  );
 }
 
 export function SubcategoryImageModal({

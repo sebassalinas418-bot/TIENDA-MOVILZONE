@@ -174,6 +174,7 @@ function sanitizeExtra(value: unknown): Product | null {
     inStock: described.inStock,
     onSale: false,
     isNew: Boolean(item.isNew),
+    details: typeof item.details === "string" && item.details.trim() ? item.details.trim() : undefined,
   };
 }
 
@@ -458,7 +459,7 @@ export function CatalogProvider({
           offers[product.id],
         ),
         storeHidden: Boolean(hidden[product.id]),
-        details: details[product.id] || undefined,
+        details: details[product.id] || product.details || undefined,
       })),
     [details, extras, hidden, images, offers, prices, remote],
   );
@@ -530,8 +531,9 @@ export function CatalogProvider({
     const offerChanged = Boolean(patch.offer);
     const titleChanged = Boolean(patch.title?.trim());
     const categoryChanged = Boolean(patch.categoryId || patch.category?.trim());
+    const detailsChanged = patch.details != null;
     const persistImage = isPersistableProductImage(patch.image) ? patch.image!.trim() : "";
-    if (!priceChanged && !stockChanged && !offerChanged && !persistImage && !titleChanged && !categoryChanged) return;
+    if (!priceChanged && !stockChanged && !offerChanged && !persistImage && !titleChanged && !categoryChanged && !detailsChanged) return;
     if (persistImage) void persistStoreProductImage(productId, persistImage);
     const originalImage =
       (remote ?? []).find((item) => item.id === productId)?.image ??
@@ -544,6 +546,7 @@ export function CatalogProvider({
       stock: patch.stock ?? stock[productId] ?? current.stock,
       category: patch.category?.trim() || current.category,
       image: persistImage || (isPersistableProductImage(originalImage) ? originalImage : undefined),
+      details: patch.details != null ? patch.details : current.details,
     });
   }
 
@@ -564,6 +567,7 @@ export function CatalogProvider({
       inStock: described.inStock,
       onSale: false,
       isNew: false,
+      details: input.details?.trim() || undefined,
     };
     setExtras((current) => [...current, product]);
     setOffers((current) => ({ ...current, [id]: input.offer }));
@@ -577,6 +581,7 @@ export function CatalogProvider({
       stock: product.stock,
       category: product.category,
       image: product.image,
+      details: input.details?.trim() || "",
     });
     return id;
   }

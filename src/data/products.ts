@@ -22,6 +22,7 @@ export type Product = {
   reservedQty?: number;
   sellableStock?: number;
   pendingHold?: boolean;
+  details?: string;
 };
 
 export function describeStock(quantity: number) {

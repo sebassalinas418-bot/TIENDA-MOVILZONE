@@ -19,6 +19,7 @@ type ProductRow = {
   image_url: string | null;
   is_active: boolean;
   sku: string;
+  descripcion?: string | null;
 };
 
 export type WebSaleItem = {
@@ -104,6 +105,7 @@ function mapRow(row: ProductRow): Product {
     inStock: described.inStock,
     onSale: false,
     isNew: false,
+    details: row.descripcion?.trim() || undefined,
   };
 }
 
@@ -114,7 +116,7 @@ export async function readTallerCatalog(): Promise<Product[] | null> {
   if (!shopId) return [];
   const { data, error } = await client
     .from("products")
-    .select("id, name, category, stock, sale_price, image_url, is_active, sku")
+    .select("id, name, category, stock, sale_price, image_url, is_active, sku, descripcion")
     .eq("shop_id", shopId)
     .eq("is_active", true)
     .order("name", { ascending: true });
@@ -448,6 +450,7 @@ export async function saveTallerProduct(input: {
   stock: number;
   category: string;
   image?: string;
+  details?: string;
 }) {
   const client = adminClient();
   if (!client) return { ok: false as const, reason: "sin-conexion" };
@@ -457,6 +460,7 @@ export async function saveTallerProduct(input: {
   if (!userId) return { ok: false as const, reason: "sin-admin" };
   const price = Math.max(1, Math.round(input.price));
   const stock = Math.max(0, Math.floor(input.stock));
+  const descripcion = input.details != null ? input.details.trim() : undefined;
 
   if (input.id) {
     const { data: current, error: readError } = await client
@@ -476,6 +480,7 @@ export async function saveTallerProduct(input: {
         stock,
         category: input.category,
         ...(persistImage ? { image_url: persistImage } : {}),
+        ...(descripcion != null ? { descripcion } : {}),
       })
       .eq("id", input.id)
       .eq("shop_id", shopId);
@@ -506,6 +511,7 @@ export async function saveTallerProduct(input: {
       sale_price: price,
       cost_price: 0,
       image_url: persistableInventoryImage(input.image),
+      descripcion: descripcion || null,
       is_active: true,
     })
     .select("id")

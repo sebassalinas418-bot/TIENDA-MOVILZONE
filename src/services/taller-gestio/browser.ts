@@ -102,6 +102,7 @@ export async function pushTallerProduct(input: {
   stock: number;
   category: string;
   image?: string;
+  details?: string;
 }) {
   const token = readTallerToken();
   if (!token) return null;
