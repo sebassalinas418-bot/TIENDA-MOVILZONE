@@ -1,10 +1,9 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { serverGeminiKey } from "@/lib/store-redes/gemini-key";
 
 const PROMPT =
   "Analiza la imagen de este producto tecnológico/accesorio. Devuelve ÚNICAMENTE un objeto JSON válido sin formato markdown con las siguientes claves: 'nombre_sugerido' (título corto y comercial), 'categoria' (ej. Auriculares, Cargadores) y 'detalles' (lista en HTML o texto enriquecido con 4-5 características técnicas principales que deduzcas del empaque o del producto para usar como descripción de venta)";
 
-const MODELS = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash"];
+const MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
 const MAX_BYTES = 8 * 1024 * 1024;
 
 export type RecognizedProduct = {
@@ -79,6 +78,59 @@ export async function loadRecognitionImage(input: { imageUrl?: string; imageBase
   return { mimeType, data: bytes.toString("base64") };
 }
 
+function friendlyGeminiError(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error);
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("api key not valid") ||
+    lower.includes("unauthorized") ||
+    lower.includes("unauthenticated") ||
+    lower.includes("access_token_type")
+  ) {
+    return "La clave de Gemini no es válida. Creá una nueva en Google AI Studio (aistudio.google.com/apikey) y cargala en Vercel como GEMINI_API_KEY.";
+  }
+  if (lower.includes("quota") || lower.includes("resource exhausted")) {
+    return "Gemini alcanzó el límite de uso. Probá de nuevo en unos minutos.";
+  }
+  if (lower.includes("no longer available") || lower.includes("not found")) {
+    return "Ese modelo de Gemini ya no está disponible. Probá de nuevo.";
+  }
+  return "Gemini no pudo analizar la foto. Probá de nuevo.";
+}
+
+async function generateWithGemini(key: string, modelName: string, image: { mimeType: string; data: string }) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": key,
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: PROMPT },
+              { inlineData: { mimeType: image.mimeType, data: image.data } },
+            ],
+          },
+        ],
+        generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+      }),
+    },
+  );
+  const payload = (await response.json()) as {
+    error?: { message?: string };
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message || `Gemini ${response.status}`);
+  }
+  return payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim() ?? "";
+}
+
 export async function recognizeProductImage(image: { mimeType: string; data: string }): Promise<RecognizedProduct> {
   const key = serverGeminiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY en el servidor.");
@@ -86,20 +138,11 @@ export async function recognizeProductImage(image: { mimeType: string; data: str
   let lastError = "Gemini no respondió.";
   for (const modelName of MODELS) {
     try {
-      const genAI = new GoogleGenerativeAI(key);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
-      });
-      const result = await model.generateContent([
-        { text: PROMPT },
-        { inlineData: { mimeType: image.mimeType, data: image.data } },
-      ]);
-      const parsed = parseRecognition(result.response.text().trim());
+      const parsed = parseRecognition(await generateWithGemini(key, modelName, image));
       if (parsed) return parsed;
       lastError = "La IA no devolvió un JSON válido.";
     } catch (error) {
-      lastError = error instanceof Error ? error.message : "Gemini no respondió.";
+      lastError = friendlyGeminiError(error);
     }
   }
   throw new Error(lastError);
