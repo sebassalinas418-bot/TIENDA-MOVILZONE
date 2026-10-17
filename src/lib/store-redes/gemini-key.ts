@@ -87,9 +87,8 @@ export function socialGeminiModels() {
   const preferred = [
     process.env.GEMINI_MODEL?.trim(),
     process.env.NEXT_PUBLIC_GEMINI_MODEL?.trim(),
-    "gemini-1.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
     "gemini-flash-latest",
   ].filter((item, index, all): item is string => Boolean(item) && all.indexOf(item) === index);
   return preferred;

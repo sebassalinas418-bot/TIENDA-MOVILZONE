@@ -47,3 +47,12 @@ body {
     transform: none;
   }
 }
+
+@keyframes ai-scan {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}

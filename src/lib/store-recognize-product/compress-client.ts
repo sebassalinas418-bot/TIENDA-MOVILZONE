@@ -1,4 +1,4 @@
-const MAX_WIDTH = 800;
+const MAX_WIDTH = 600;
 const JPEG_QUALITY = 0.6;
 
 function loadImage(src: string) {
@@ -28,16 +28,16 @@ function canvasToJpeg(image: HTMLImageElement) {
 }
 
 export async function compressImageForAi(source: File | string) {
-  if (typeof source === "string" && source.startsWith("data:image/")) {
-    return { imageBase64: canvasToJpeg(await loadImage(source)), mimeType: "image/jpeg" };
-  }
   if (source instanceof File) {
     const objectUrl = URL.createObjectURL(source);
     try {
-      return { imageBase64: canvasToJpeg(await loadImage(objectUrl)), mimeType: "image/jpeg" };
+      return { imageBase64: canvasToJpeg(await loadImage(objectUrl)), mimeType: "image/jpeg" as const };
     } finally {
       URL.revokeObjectURL(objectUrl);
     }
+  }
+  if (source.startsWith("data:image/") || source.startsWith("blob:")) {
+    return { imageBase64: canvasToJpeg(await loadImage(source)), mimeType: "image/jpeg" as const };
   }
   const image = new Image();
   image.crossOrigin = "anonymous";
@@ -46,5 +46,5 @@ export async function compressImageForAi(source: File | string) {
     image.onerror = () => reject(new Error("No se pudo leer la foto para comprimirla."));
     image.src = source;
   });
-  return { imageBase64: canvasToJpeg(loaded), mimeType: "image/jpeg" };
+  return { imageBase64: canvasToJpeg(loaded), mimeType: "image/jpeg" as const };
 }

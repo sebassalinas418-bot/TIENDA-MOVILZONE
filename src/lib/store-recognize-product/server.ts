@@ -1,10 +1,11 @@
 import { serverGeminiKey } from "@/lib/store-redes/gemini-key";
 
+/** Gratis / Lite: flash-latest está en cuota 429; 2.5-flash da 404 a cuentas nuevas. */
+const MODELS = ["gemini-3.5-flash-lite", "gemini-flash-lite-latest"] as const;
+const GEMINI_TIMEOUT_MS = 50_000;
+const MAX_BYTES = 400 * 1024;
 const PROMPT =
-  "Analiza la imagen de este producto tecnológico/accesorio. Devuelve ÚNICAMENTE un objeto JSON válido sin formato markdown con las siguientes claves: 'nombre_sugerido' (título corto y comercial), 'categoria' (ej. Auriculares, Cargadores) y 'detalles' (lista en HTML o texto enriquecido con 4-5 características técnicas principales que deduzcas del empaque o del producto para usar como descripción de venta)";
-
-const MODELS = ["gemini-1.5-flash", "gemini-flash-latest"];
-const MAX_BYTES = 8 * 1024 * 1024;
+  "Analizá esta foto de producto. Respondé SOLO JSON con claves nombre_sugerido (título corto), categoria y detalles (4 características de venta).";
 
 export type RecognizedProduct = {
   nombre_sugerido: string;
@@ -29,19 +30,6 @@ function parseRecognition(raw: string): RecognizedProduct | null {
   }
 }
 
-function allowedImageUrl(raw: string) {
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-    const host = url.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1") return true;
-    if (host.endsWith(".supabase.co")) return true;
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 function mimeFrom(value: string, fallback = "image/jpeg") {
   const mime = value.split(";")[0]?.trim().toLowerCase() ?? "";
   if (mime === "image/jpeg" || mime === "image/jpg" || mime === "image/png" || mime === "image/webp") {
@@ -50,7 +38,7 @@ function mimeFrom(value: string, fallback = "image/jpeg") {
   return fallback;
 }
 
-export async function loadRecognitionImage(input: { imageUrl?: string; imageBase64?: string; mimeType?: string }) {
+export function loadRecognitionImage(input: { imageBase64?: string; mimeType?: string }) {
   const dataUrl = input.imageBase64?.trim() ?? "";
   if (dataUrl.startsWith("data:image/")) {
     const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/);
@@ -59,28 +47,19 @@ export async function loadRecognitionImage(input: { imageUrl?: string; imageBase
     if (bytes.length > MAX_BYTES) throw new Error("La imagen es demasiado grande para analizar.");
     return { mimeType: mimeFrom(match[1]), data: bytes.toString("base64") };
   }
-  if (dataUrl && !dataUrl.startsWith("http")) {
-    const bytes = Buffer.from(dataUrl.replace(/\s+/g, ""), "base64");
-    if (!bytes.length) throw new Error("La imagen en base64 no es válida.");
-    if (bytes.length > MAX_BYTES) throw new Error("La imagen es demasiado grande para analizar.");
-    return { mimeType: mimeFrom(input.mimeType || "image/jpeg"), data: bytes.toString("base64") };
+  if (!dataUrl || dataUrl.startsWith("http")) {
+    throw new Error("La IA necesita la foto en base64 ya comprimida, no una URL.");
   }
-
-  const imageUrl = input.imageUrl?.trim() || dataUrl;
-  if (!imageUrl || !allowedImageUrl(imageUrl)) {
-    throw new Error("Pasá una URL pública de Storage o una imagen en base64.");
-  }
-  const response = await fetch(imageUrl, { cache: "no-store", redirect: "follow" });
-  if (!response.ok) throw new Error("No se pudo leer la imagen del producto.");
-  const mimeType = mimeFrom(response.headers.get("content-type") || input.mimeType || "image/jpeg");
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = Buffer.from(dataUrl.replace(/\s+/g, ""), "base64");
+  if (!bytes.length) throw new Error("La imagen en base64 no es válida.");
   if (bytes.length > MAX_BYTES) throw new Error("La imagen es demasiado grande para analizar.");
-  return { mimeType, data: bytes.toString("base64") };
+  return { mimeType: mimeFrom(input.mimeType || "image/jpeg"), data: bytes.toString("base64") };
 }
 
 function friendlyGeminiError(error: unknown) {
   const raw = error instanceof Error ? error.message : String(error);
   const lower = raw.toLowerCase();
+  if (lower.includes("tardó mucho")) return raw;
   if (
     lower.includes("api key not valid") ||
     lower.includes("unauthorized") ||
@@ -98,9 +77,25 @@ function friendlyGeminiError(error: unknown) {
   return "Gemini no pudo analizar la foto. Probá de nuevo.";
 }
 
-async function generateWithGemini(key: string, modelName: string, image: { mimeType: string; data: string }) {
+function isRetryableModelError(status: number, message: string) {
+  const lower = message.toLowerCase();
+  return (
+    status === 404 ||
+    status === 429 ||
+    lower.includes("no longer available") ||
+    lower.includes("not found") ||
+    lower.includes("quota") ||
+    lower.includes("resource exhausted")
+  );
+}
+
+async function generateWithModel(
+  key: string,
+  model: string,
+  image: { mimeType: string; data: string },
+) {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: "POST",
       headers: {
@@ -111,43 +106,52 @@ async function generateWithGemini(key: string, modelName: string, image: { mimeT
         contents: [
           {
             role: "user",
-            parts: [
-              { text: PROMPT },
-              { inlineData: { mimeType: image.mimeType, data: image.data } },
-            ],
+            parts: [{ text: PROMPT }, { inlineData: { mimeType: image.mimeType, data: image.data } }],
           },
         ],
         generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 400,
+          temperature: 0,
+          maxOutputTokens: 280,
           responseMimeType: "application/json",
         },
       }),
+      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
     },
   );
   const payload = (await response.json()) as {
     error?: { message?: string };
     candidates?: { content?: { parts?: { text?: string }[] } }[];
   };
+  const message = payload.error?.message || `Gemini ${response.status}`;
   if (!response.ok) {
-    throw new Error(payload.error?.message || `Gemini ${response.status}`);
+    const error = new Error(message);
+    (error as Error & { status?: number }).status = response.status;
+    throw error;
   }
-  return payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim() ?? "";
+  const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim() ?? "";
+  const parsed = parseRecognition(text);
+  if (!parsed) throw new Error("La IA no devolvió un JSON válido.");
+  return parsed;
 }
 
 export async function recognizeProductImage(image: { mimeType: string; data: string }): Promise<RecognizedProduct> {
   const key = serverGeminiKey();
   if (!key) throw new Error("Falta GEMINI_API_KEY en el servidor.");
 
-  let lastError = "Gemini no respondió.";
-  for (const modelName of MODELS) {
+  let lastError: unknown;
+  for (const model of MODELS) {
     try {
-      const parsed = parseRecognition(await generateWithGemini(key, modelName, image));
-      if (parsed) return parsed;
-      lastError = "La IA no devolvió un JSON válido.";
+      return await generateWithModel(key, model, image);
     } catch (error) {
-      lastError = friendlyGeminiError(error);
+      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        throw new Error("La IA tardó mucho, intentá de nuevo.");
+      }
+      const status = (error as Error & { status?: number }).status ?? 0;
+      const message = error instanceof Error ? error.message : String(error);
+      lastError = error;
+      if (isRetryableModelError(status, message)) continue;
+      throw new Error(friendlyGeminiError(error));
     }
   }
-  throw new Error(lastError);
+  throw new Error(friendlyGeminiError(lastError));
 }
