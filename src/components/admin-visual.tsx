@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { ProductAiFillButton } from "@/components/product-ai-fill-button";
 import { StoreProductImageField } from "@/components/store-product-image-field";
 import { useStoreConfig } from "@/config/store-config";
 import { brands, formatPrice } from "@/data/products";
-import { isPersistableProductImage } from "@/lib/store-product-images/public-url";
+import { isPersistableProductImage, isSharedProductImage } from "@/lib/store-product-images/public-url";
 import { quotePrice, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
 
 type OfferDraft = {
@@ -35,11 +36,17 @@ export function ProductEditModal({
   onClose: () => void;
   onSave: (patch: ProductPatch) => void;
 }) {
+  const { config } = useStoreConfig();
+  const [title, setTitle] = useState(product.title);
+  const [categoryId, setCategoryId] = useState(product.categoryId);
+  const [subcategoryId, setSubcategoryId] = useState(product.subcategoryId);
+  const [details, setDetails] = useState(product.details ?? "");
   const [price, setPrice] = useState(String(product.price));
   const [stockValue, setStockValue] = useState(String(stock));
   const [image, setImage] = useState(product.image);
   const [imageError, setImageError] = useState("");
   const [draft, setDraft] = useState<OfferDraft>(draftFrom(offer));
+  const category = config.categories.find((item) => item.id === categoryId) ?? config.categories[0];
   const numericPrice = Number(price);
   const numericStock = Number(stockValue);
   const quote = quotePrice(Number.isFinite(numericPrice) ? numericPrice : 0, offerFrom(draft));
@@ -59,6 +66,11 @@ export function ProductEditModal({
           event.preventDefault();
           if (!canSave) return;
           onSave({
+            title: title.trim() || product.title,
+            category: category?.name ?? product.category,
+            categoryId: category?.id ?? product.categoryId,
+            subcategoryId,
+            details: details.trim(),
             price: Math.round(numericPrice),
             stock: Math.floor(numericStock),
             offer: offerFrom(draft),
@@ -74,6 +86,69 @@ export function ProductEditModal({
           autoIsolate
           productId={product.id}
         />
+        <ProductAiFillButton
+          image={image}
+          categories={config.categories}
+          onResult={(result) => {
+            if (result.title) setTitle(result.title);
+            if (result.categoryId) {
+              setCategoryId(result.categoryId);
+              setSubcategoryId(result.subcategoryId ?? "");
+            }
+            if (result.details) setDetails(result.details);
+          }}
+        />
+        <label className="block text-sm">
+          <span className="font-medium text-gray-700">Nombre</span>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className="mt-1 h-10 w-full rounded-xl border border-gray-200 px-3 outline-none focus:border-sky-500"
+          />
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm">
+            <span className="font-medium text-gray-700">Categoría</span>
+            <select
+              value={category?.id ?? ""}
+              onChange={(event) => {
+                setCategoryId(event.target.value);
+                setSubcategoryId("");
+              }}
+              className="mt-1 h-10 w-full rounded-xl border border-gray-200 bg-white px-3 outline-none focus:border-sky-500"
+            >
+              {config.categories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="font-medium text-gray-700">Subcategoría</span>
+            <select
+              value={subcategoryId}
+              onChange={(event) => setSubcategoryId(event.target.value)}
+              className="mt-1 h-10 w-full rounded-xl border border-gray-200 bg-white px-3 outline-none focus:border-sky-500"
+            >
+              <option value="">Sin subcategoría</option>
+              {category?.children.map((child) => (
+                <option key={child.id} value={child.id}>
+                  {child.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label className="block text-sm">
+          <span className="font-medium text-gray-700">Detalles del producto</span>
+          <textarea
+            value={details}
+            onChange={(event) => setDetails(event.target.value)}
+            rows={5}
+            className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
+          />
+        </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
             <span className="font-medium text-gray-700">Precio original</span>
@@ -127,6 +202,7 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
   const [draft, setDraft] = useState<OfferDraft>({ active: false, kind: "percent", value: "10" });
   const [image, setImage] = useState(config.categories[0]?.image ?? "/categories/todo.jpg");
   const [imageError, setImageError] = useState("");
+  const [details, setDetails] = useState("");
   const category = config.categories.find((item) => item.id === categoryId) ?? config.categories[0];
   const numericPrice = Number(price);
   const numericStock = Number(stock);
@@ -158,6 +234,7 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
             image: image.trim() || category.image,
             stock: Math.floor(numericStock),
             offer: offerFrom(draft),
+            details: details.trim(),
           });
         }}
       >
@@ -177,11 +254,34 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
             const next = config.categories.find((item) => item.id === id);
             setCategoryId(id);
             setSubcategoryId("");
-            if (next && !image.startsWith("data:")) setImage(next.image);
+            if (next && !isSharedProductImage(image) && !image.startsWith("data:") && !image.startsWith("blob:")) {
+              setImage(next.image);
+            }
           }}
           onSubcategory={setSubcategoryId}
         />
         <ImagePicker value={image} error={imageError} onChange={setImage} onError={setImageError} />
+        <ProductAiFillButton
+          image={image}
+          categories={config.categories}
+          onResult={(result) => {
+            if (result.title) setTitle(result.title);
+            if (result.categoryId) {
+              setCategoryId(result.categoryId);
+              setSubcategoryId(result.subcategoryId ?? "");
+            }
+            if (result.details) setDetails(result.details);
+          }}
+        />
+        <label className="block text-sm">
+          <span className="font-medium text-gray-700">Detalles del producto</span>
+          <textarea
+            value={details}
+            onChange={(event) => setDetails(event.target.value)}
+            rows={5}
+            className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-sky-500"
+          />
+        </label>
         <OfferFields price={Number.isFinite(numericPrice) ? numericPrice : 0} draft={draft} onChange={setDraft} />
         <div className="flex gap-2">
           <button

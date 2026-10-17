@@ -16,6 +16,7 @@ import {
   saveProductPlacements,
   type StoreProductPlacement,
 } from "@/lib/store-product-placements";
+import { loadProductDetails, saveProductDetails } from "@/lib/store-product-details";
 
 /**
  * Ofertas de transferencia: siguen en este navegador y se aplican sobre el precio del taller.
@@ -41,6 +42,7 @@ export type CatalogProduct = Product & {
   salePrice: number;
   badge: string | null;
   storeHidden?: boolean;
+  details?: string;
 };
 
 export type NewProductInput = {
@@ -53,6 +55,7 @@ export type NewProductInput = {
   image: string;
   stock: number;
   offer: ProductOffer;
+  details?: string;
 };
 
 export type ProductPatch = {
@@ -60,6 +63,11 @@ export type ProductPatch = {
   stock?: number;
   offer?: ProductOffer;
   image?: string;
+  title?: string;
+  category?: string;
+  categoryId?: string;
+  subcategoryId?: string;
+  details?: string;
 };
 
 type CatalogContextValue = {
@@ -78,6 +86,7 @@ const OFFERS_KEY = "movilzone.offers";
 const EXTRAS_KEY = "movilzone.extra-products";
 const PRICES_KEY = "movilzone.price-overrides";
 const IMAGES_KEY = "movilzone.product-images";
+const TITLES_KEY = "movilzone.product-titles";
 const HIDDEN_KEY = "movilzone.hidden-products";
 const MAX_PERCENT = 90;
 
@@ -281,6 +290,7 @@ export function CatalogProvider({
   const [ready, setReady] = useState(false);
   const [placements, setPlacements] = useState<Record<string, StoreProductPlacement>>({});
   const [images, setImages] = useState<Record<string, string>>({});
+  const [details, setDetails] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<Record<string, true>>(() => {
     const next: Record<string, true> = {};
     for (const id of initialHidden) {
@@ -296,6 +306,7 @@ export function CatalogProvider({
     setPrices(loadPrices());
     setPlacements(loadProductPlacements());
     setImages(loadImages());
+    setDetails(loadProductDetails());
     const localHidden = loadHidden();
     setHidden((current) => (Object.keys(current).length > 0 ? current : localHidden));
     setReady(true);
@@ -310,10 +321,11 @@ export function CatalogProvider({
       saveProductPlacements(placements);
       window.localStorage.setItem(IMAGES_KEY, JSON.stringify(images));
       window.localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
+      saveProductDetails(details);
     } catch {
       /* data URLs / plantillas de Redes pueden llenar la cuota */
     }
-  }, [extras, offers, prices, placements, images, hidden, ready]);
+  }, [extras, offers, prices, placements, images, hidden, details, ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -446,8 +458,9 @@ export function CatalogProvider({
           offers[product.id],
         ),
         storeHidden: Boolean(hidden[product.id]),
+        details: details[product.id] || undefined,
       })),
-    [extras, hidden, images, offers, prices, remote],
+    [details, extras, hidden, images, offers, prices, remote],
   );
 
   function saveOffer(productId: string, offer: ProductOffer) {
@@ -476,13 +489,49 @@ export function CatalogProvider({
         setExtras((current) => current.map((item) => (item.id === productId ? { ...item, image } : item)));
       }
     }
+    if (patch.details != null) {
+      const text = patch.details.trim();
+      setDetails((current) => {
+        const next = { ...current };
+        if (text) next[productId] = text;
+        else delete next[productId];
+        return next;
+      });
+    }
+    if (patch.title?.trim()) {
+      const title = patch.title.trim();
+      setExtras((current) => current.map((item) => (item.id === productId ? { ...item, title } : item)));
+    }
+    if (patch.categoryId) {
+      setPlacements((current) => ({
+        ...current,
+        [productId]: {
+          categoryId: patch.categoryId!,
+          subcategoryId: patch.subcategoryId || undefined,
+        },
+      }));
+      setExtras((current) =>
+        current.map((item) =>
+          item.id === productId
+            ? {
+                ...item,
+                category: patch.category?.trim() || item.category,
+                categoryId: patch.categoryId!,
+                subcategoryId: patch.subcategoryId ?? item.subcategoryId,
+              }
+            : item,
+        ),
+      );
+    }
     const current = products.find((item) => item.id === productId);
     if (!current) return;
     const priceChanged = patch.price != null;
     const stockChanged = patch.stock != null;
     const offerChanged = Boolean(patch.offer);
+    const titleChanged = Boolean(patch.title?.trim());
+    const categoryChanged = Boolean(patch.categoryId || patch.category?.trim());
     const persistImage = isPersistableProductImage(patch.image) ? patch.image!.trim() : "";
-    if (!priceChanged && !stockChanged && !offerChanged && !persistImage) return;
+    if (!priceChanged && !stockChanged && !offerChanged && !persistImage && !titleChanged && !categoryChanged) return;
     if (persistImage) void persistStoreProductImage(productId, persistImage);
     const originalImage =
       (remote ?? []).find((item) => item.id === productId)?.image ??
@@ -490,10 +539,10 @@ export function CatalogProvider({
       current.image;
     void pushTallerProduct({
       id: productId,
-      title: current.title,
+      title: patch.title?.trim() || current.title,
       price: patch.price ?? current.price,
       stock: patch.stock ?? stock[productId] ?? current.stock,
-      category: current.category,
+      category: patch.category?.trim() || current.category,
       image: persistImage || (isPersistableProductImage(originalImage) ? originalImage : undefined),
     });
   }
@@ -519,6 +568,9 @@ export function CatalogProvider({
     setExtras((current) => [...current, product]);
     setOffers((current) => ({ ...current, [id]: input.offer }));
     setProductStock(id, input.stock);
+    if (input.details?.trim()) {
+      setDetails((current) => ({ ...current, [id]: input.details!.trim() }));
+    }
     void pushTallerProduct({
       title: product.title,
       price: product.price,

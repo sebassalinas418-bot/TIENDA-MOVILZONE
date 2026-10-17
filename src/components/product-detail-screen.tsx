@@ -14,6 +14,7 @@ import { isSessionVerified, readSession, SESSION_EVENT, type DemoSession } from 
 import { storeProductGridClass } from "@/lib/store-product-grid/mobile";
 import { isStoreSoldOut, SOLD_OUT_LABEL, soldOutStrikeClass } from "@/lib/store-sold-out/presentation";
 import { overlayCatalogStock } from "@/lib/web-pending-stock/availability";
+import { stripUnsafeProductHtml } from "@/lib/store-product-details";
 
 export function ProductDetailScreen() {
   const params = useParams<{ id: string }>();
@@ -274,15 +275,28 @@ export function ProductDetailScreen() {
           <section className="mt-8 border-t border-neutral-200 pt-6">
             <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">Detalles del producto</h2>
             <div data-product-ai-description className="mt-3 text-sm leading-6 text-neutral-600">
-              {product.category ? (
-                <p>
-                  {product.title} · {product.category}
-                  {product.brand ? ` · ${product.brand}` : ""}
-                </p>
-              ) : null}
-              <p className="mt-2 text-neutral-500">
-                Pronto vamos a completar esta descripción de forma automática.
-              </p>
+              {product.details?.trim() ? (
+                /<[a-z][\s\S]*>/i.test(product.details) ? (
+                  <div
+                    className="product-ai-details space-y-2 [&_li]:ml-4 [&_li]:list-disc [&_ul]:space-y-1"
+                    dangerouslySetInnerHTML={{ __html: stripUnsafeProductHtml(product.details) }}
+                  />
+                ) : (
+                  <div className="whitespace-pre-line">{product.details}</div>
+                )
+              ) : (
+                <>
+                  {product.category ? (
+                    <p>
+                      {product.title} · {product.category}
+                      {product.brand ? ` · ${product.brand}` : ""}
+                    </p>
+                  ) : null}
+                  <p className="mt-2 text-neutral-500">
+                    Pronto vamos a completar esta descripción de forma automática.
+                  </p>
+                </>
+              )}
             </div>
           </section>
         </section>

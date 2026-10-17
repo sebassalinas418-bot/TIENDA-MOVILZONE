@@ -60,6 +60,10 @@ export function socialGeminiKey() {
   return firstEnv(["NEXT_PUBLIC_GEMINI_API_KEY", "GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY"]);
 }
 
+export function serverGeminiKey() {
+  return firstEnv(["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY", "NEXT_PUBLIC_GEMINI_API_KEY"]);
+}
+
 export function socialOpenAiKey() {
   return firstEnv(["NEXT_PUBLIC_OPENAI_API_KEY", "OPENAI_API_KEY"]);
 }
