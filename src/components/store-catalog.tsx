@@ -1275,6 +1275,8 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
         <SubcategoryImageModal
           name={imageEditing.title}
           image={imageEditing.image}
+          productId={imageEditing.id}
+          extraImages={imageEditing.extraImages}
           onClose={() => setImageEditId(null)}
           onSave={(image) => {
             updateProduct(imageEditing.id, { image });

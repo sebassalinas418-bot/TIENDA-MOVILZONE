@@ -449,9 +449,8 @@ export function CatalogProvider({
           if (id && extrasForProduct.length) next[id] = extrasForProduct;
         }
         setExtraImages((current) => {
-          const currentKeys = JSON.stringify(current);
-          const nextKeys = JSON.stringify(next);
-          return currentKeys === nextKeys ? current : { ...current, ...next };
+          const merged = { ...current, ...next };
+          return JSON.stringify(current) === JSON.stringify(merged) ? current : merged;
         });
       } catch {
         /* se mantiene la galería local */
@@ -530,8 +529,17 @@ export function CatalogProvider({
       });
     }
     if (patch.extraImages) {
-      const extrasForProduct = normalizeExtraImages(patch.extraImages, patch.image);
-      setExtraImages((current) => ({ ...current, [productId]: extrasForProduct }));
+      const currentImage =
+        patch.image ??
+        products.find((item) => item.id === productId)?.image ??
+        images[productId];
+      const extrasForProduct = normalizeExtraImages(patch.extraImages, currentImage);
+      setExtraImages((current) => {
+        const next = { ...current };
+        if (extrasForProduct.length) next[productId] = extrasForProduct;
+        else delete next[productId];
+        return next;
+      });
       setExtras((current) =>
         current.map((item) => (item.id === productId ? { ...item, extraImages: extrasForProduct } : item)),
       );

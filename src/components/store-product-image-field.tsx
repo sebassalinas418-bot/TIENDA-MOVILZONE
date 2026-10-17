@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { StoreWebImageSearch, type WebImageChoice } from "@/components/store-web-image-search";
+import { StoreWebImageSearch, type WebImageChoice, type WebImageRole } from "@/components/store-web-image-search";
 import { prepareProductImageFile } from "@/lib/admin-image-tools/prepare-product-image";
 import { removeProductImageBackground } from "@/lib/admin-image-tools/remove-product-image-background";
 import { uploadStoreProductImage } from "@/lib/store-product-images/client-upload";
@@ -61,6 +61,7 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
   const [processHint, setProcessHint] = useState<string | null>(null);
   const [webSearchOpen, setWebSearchOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
+  const [pendingExtras, setPendingExtras] = useState<string[]>([]);
 
   useEffect(() => {
     if (stage === "awaiting") return;
@@ -156,10 +157,6 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
     [pendingFile],
   );
 
-  function hasMainPhoto() {
-    return Boolean((preview && preview !== "") || value?.trim());
-  }
-
   function pushExtra(url: string) {
     const next = normalizeExtraImages([...extraImages, url], value);
     if (next.length === extraImages.length) {
@@ -180,16 +177,15 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
       setStage("uploading");
       const url = await uploadStoreProductImage(compressed, asExtra ? undefined : productId, { asIs: true });
       if (asExtra) {
-        if (pushExtra(url)) setProcessHint("Foto extra agregada. Guardá el producto para conservarla.");
+        pushExtra(url);
       } else {
         setPendingFile(null);
         onPendingFile?.(null);
         onChange(url);
         setPreview(url);
-        setProcessHint("Foto de la web lista para guardar.");
       }
-      setWebSearchOpen(false);
       setPlusOpen(false);
+      setWebSearchOpen(false);
     } catch (uploadError) {
       reportError(uploadError instanceof Error ? uploadError.message : "No se pudo usar esa foto.");
     } finally {
@@ -197,10 +193,18 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
     }
   }
 
-  async function applyWebImage(hit: WebImageChoice) {
+  async function applyWebImage(hit: WebImageChoice, role: WebImageRole) {
+    setWebSearchOpen(false);
+    setPlusOpen(false);
     setError(null);
     onError?.("");
     setProcessHint(null);
+    const previewSrc = hit.thumb || hit.url;
+    if (role === "extra") {
+      setPendingExtras((current) => (current.includes(previewSrc) ? current : [...current, previewSrc]));
+    } else {
+      setPreview(previewSrc);
+    }
     setStage("compressing");
     try {
       const response = await fetch(`/api/store-image-fetch?url=${encodeURIComponent(hit.url)}`, {
@@ -209,8 +213,11 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
       if (!response.ok) throw new Error("No se pudo descargar esa foto.");
       const blob = await response.blob();
       const downloaded = new File([blob], "producto-web.jpg", { type: blob.type || "image/jpeg" });
-      await uploadPickedFile(downloaded, hasMainPhoto());
+      await uploadPickedFile(downloaded, role === "extra");
+      setPendingExtras((current) => current.filter((item) => item !== previewSrc));
     } catch (webError) {
+      setPendingExtras((current) => current.filter((item) => item !== previewSrc));
+      if (role === "main") setPreview(value || null);
       setStage("idle");
       reportError(webError instanceof Error ? webError.message : "No se pudo usar esa foto.");
     }
@@ -252,6 +259,10 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
 
   const awaiting = stage === "awaiting";
   const busy = stage !== "idle" && !awaiting;
+  const extrasEnabled = typeof onExtraImagesChange === "function";
+  const extrasToShow = extrasEnabled
+    ? [...extraImages, ...pendingExtras.filter((item) => !extraImages.includes(item))]
+    : [];
   const stageLabel =
     stage === "compressing"
       ? "Comprimiendo…"
@@ -291,27 +302,29 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
             </div>
           ) : null}
         </div>
-          {extraImages.map((src) => (
+          {extrasToShow.map((src) => (
             <div key={src} className="relative size-20 overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <img src={src} alt="" className="size-full object-contain" />
+              <img src={src} alt="" referrerPolicy="no-referrer" className="size-full object-contain" />
               <button
                 type="button"
                 aria-label="Quitar foto extra"
                 disabled={disabled || busy}
-                onClick={() =>
-                  onExtraImagesChange?.(extraImages.filter((item) => item !== src))
-                }
+                onClick={() => {
+                  setPendingExtras((current) => current.filter((item) => item !== src));
+                  onExtraImagesChange?.(extraImages.filter((item) => item !== src));
+                }}
                 className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-xs text-slate-700 shadow-sm"
               >
                 ×
               </button>
             </div>
           ))}
+          {extrasEnabled ? (
           <div className="relative">
             <button
               type="button"
               aria-label="Agregar otra foto"
-              disabled={disabled || busy || extraImages.length >= MAX_PRODUCT_EXTRA_IMAGES}
+              disabled={disabled || busy || extrasToShow.length >= MAX_PRODUCT_EXTRA_IMAGES}
               onClick={() => setPlusOpen((open) => !open)}
               className="flex size-20 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-fuchsia-500 text-3xl font-light text-white shadow-sm hover:opacity-95 disabled:opacity-50"
             >
@@ -346,6 +359,7 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
               </div>
             ) : null}
           </div>
+          ) : null}
           <input
             ref={extraGalleryInputRef}
             type="file"
@@ -465,10 +479,13 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
         open={webSearchOpen}
         defaultQuery={productName}
         busy={busy}
+        canAddExtra={extrasToShow.length < MAX_PRODUCT_EXTRA_IMAGES}
+        currentMain={preview}
+        currentExtras={extrasToShow}
         onClose={() => {
           if (!busy) setWebSearchOpen(false);
         }}
-        onPick={(hit) => void applyWebImage(hit)}
+        onPick={(hit, role) => void applyWebImage(hit, role)}
       />
     </div>
   );

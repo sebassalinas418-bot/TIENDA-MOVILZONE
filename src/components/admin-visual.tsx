@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
 import { ProductAiFillButton } from "@/components/product-ai-fill-button";
 import {
   StoreProductImageField,
@@ -10,7 +10,7 @@ import { useStoreConfig } from "@/config/store-config";
 import { brands, formatPrice } from "@/data/products";
 import { imageUrlForProductSave } from "@/lib/store-product-images/default-url";
 import { isPersistableProductImage } from "@/lib/store-product-images/public-url";
-import { quotePrice, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
+import { quotePrice, useCatalog, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
 
 type OfferDraft = {
   active: boolean;
@@ -41,6 +41,7 @@ export function ProductEditModal({
   onSave: (patch: ProductPatch) => void | Promise<void>;
 }) {
   const { config } = useStoreConfig();
+  const { updateProduct } = useCatalog();
   const [title, setTitle] = useState(product.title);
   const [categoryId, setCategoryId] = useState(product.categoryId);
   const [subcategoryId, setSubcategoryId] = useState(product.subcategoryId);
@@ -55,6 +56,9 @@ export function ProductEditModal({
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const imageFieldRef = useRef<StoreProductImageFieldHandle>(null);
+  useEffect(() => {
+    setExtraImages(product.extraImages ?? []);
+  }, [product.id]);
   const category = config.categories.find((item) => item.id === categoryId) ?? config.categories[0];
   const numericPrice = Number(price);
   const numericStock = Number(stockValue);
@@ -108,7 +112,10 @@ export function ProductEditModal({
           productId={product.id}
           productName={title}
           extraImages={extraImages}
-          onExtraImagesChange={setExtraImages}
+          onExtraImagesChange={(urls) => {
+            setExtraImages(urls);
+            void updateProduct(product.id, { extraImages: urls });
+          }}
         />
         <ProductAiFillButton
           image={image}
@@ -559,34 +566,81 @@ const ImagePicker = forwardRef<
 export function SubcategoryImageModal({
   name,
   image,
+  productId,
+  extraImages: extraImagesProp,
   onClose,
   onSave,
 }: {
   name: string;
   image: string;
+  productId?: string;
+  extraImages?: string[];
   onClose: () => void;
   onSave: (image: string) => void;
 }) {
+  const { updateProduct } = useCatalog();
   const [value, setValue] = useState(image);
+  const [extraImages, setExtraImages] = useState<string[]>(extraImagesProp ?? []);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const imageFieldRef = useRef<StoreProductImageFieldHandle>(null);
+
+  useEffect(() => {
+    setExtraImages(extraImagesProp ?? []);
+  }, [productId]);
 
   function save() {
-    const next = value.trim();
-    if (!isPersistableProductImage(next)) {
-      setError("Subí una imagen. Tiene que quedar una URL http(s) de Storage, no blob ni data.");
-      return;
-    }
-    onSave(next);
+    if (saving) return;
+    setSaving(true);
+    void (async () => {
+      const uploaded = await imageFieldRef.current?.persistPending();
+      const next = (uploaded || value).trim();
+      if (!isPersistableProductImage(next)) {
+        setError("Subí una imagen. Tiene que quedar una URL http(s) de Storage, no blob ni data.");
+        return;
+      }
+      if (productId) {
+        await updateProduct(productId, { extraImages });
+      }
+      onSave(next);
+    })()
+      .catch((saveError) => {
+        setError(saveError instanceof Error ? saveError.message : String(saveError));
+      })
+      .finally(() => setSaving(false));
   }
 
   return (
     <Modal title={`Imagen de ${name}`} onClose={onClose}>
-      <ImagePicker value={value} error={error} onChange={setValue} onError={setError} />
+      <ImagePicker
+        ref={imageFieldRef}
+        value={value}
+        error={error}
+        onChange={setValue}
+        onError={setError}
+        productId={productId}
+        productName={name}
+        extraImages={productId ? extraImages : undefined}
+        onExtraImagesChange={
+          productId
+            ? (urls) => {
+                setExtraImages(urls);
+                void updateProduct(productId, { extraImages: urls });
+              }
+            : undefined
+        }
+      />
+      {error ? <p className="mt-2 text-xs text-rose-600">{error}</p> : null}
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" onClick={onClose} className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50">
           Cancelar
         </button>
-        <button type="button" onClick={save} className="rounded-full bg-black px-4 py-2 text-sm font-bold text-white hover:bg-gray-800">
+        <button
+          type="button"
+          disabled={saving}
+          onClick={save}
+          className="rounded-full bg-black px-4 py-2 text-sm font-bold text-white hover:bg-gray-800 disabled:opacity-60"
+        >
           Guardar
         </button>
       </div>

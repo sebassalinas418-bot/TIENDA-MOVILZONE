@@ -23,6 +23,37 @@ function objectPath() {
   return `${shopId()}/store-galleries.json`;
 }
 
+async function allowGalleryJson(
+  client: NonNullable<ReturnType<typeof socialDb>>,
+) {
+  const { data } = await client.storage.getBucket(BUCKET);
+  const allowed = data?.allowed_mime_types ?? [];
+  if (!allowed.length || allowed.includes("application/json")) return;
+  await client.storage.updateBucket(BUCKET, {
+    public: data?.public ?? true,
+    fileSizeLimit: data?.file_size_limit ?? undefined,
+    allowedMimeTypes: [...allowed, "application/json"],
+  });
+}
+
+async function writeGalleries(
+  client: NonNullable<ReturnType<typeof socialDb>>,
+  galleries: Record<string, string[]>,
+) {
+  const body = Buffer.from(JSON.stringify(galleries));
+  const path = objectPath();
+  const tryUpload = (contentType: string) =>
+    client.storage.from(BUCKET).upload(path, body, { contentType, upsert: true });
+
+  // El bucket solo admite imágenes: el JSON viaja como jpeg para no perder la galería.
+  let { error } = await tryUpload("image/jpeg");
+  if (error) {
+    await allowGalleryJson(client);
+    ({ error } = await tryUpload("application/json"));
+  }
+  return error;
+}
+
 async function readGalleries(): Promise<Record<string, string[]>> {
   const client = socialDb();
   const shop = shopId();
@@ -67,11 +98,7 @@ export async function PUT(request: Request) {
   const galleries = await readGalleries();
   if (extras.length) galleries[productId] = extras;
   else delete galleries[productId];
-  const { error } = await client.storage.from(BUCKET).upload(
-    objectPath(),
-    Buffer.from(JSON.stringify(galleries)),
-    { contentType: "application/json", upsert: true },
-  );
+  const error = await writeGalleries(client, galleries);
   if (error) {
     return Response.json({ ok: false, error: error.message }, { status: 502, headers: noStore });
   }
