@@ -6,9 +6,9 @@ export async function uploadStoreProductImage(
   productId?: string,
   options?: { asIs?: boolean },
 ) {
-  const payload = options?.asIs ? file : await prepareProductImageFile(file);
+  const toUpload = options?.asIs ? file : await prepareProductImageFile(file);
   const body = new FormData();
-  body.append("file", payload);
+  body.append("file", toUpload);
   if (productId) body.append("productId", productId);
   const response = await fetch("/api/store-product-image", {
     method: "POST",
