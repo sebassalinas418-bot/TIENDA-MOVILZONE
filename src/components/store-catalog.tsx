@@ -9,7 +9,7 @@ import { SiteHeader } from "@/components/site-header";
 import { PageSkyFade } from "@/components/site-frame";
 import { SiteFooter } from "@/components/store-sections";
 import { useStoreConfig } from "@/config/store-config";
-import { brands, formatPrice } from "@/data/products";
+import { brands } from "@/data/products";
 import { overlayCatalogStock } from "@/lib/web-pending-stock/availability";
 import { storeProductGridClass } from "@/lib/store-product-grid/mobile";
 import { isStoreSoldOut } from "@/lib/store-sold-out/presentation";
@@ -977,9 +977,9 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
         )}
 
         <div className={`mt-3 sm:mt-6 ${admin ? "grid gap-3 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8" : "lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8"}`}>
-          <aside className={admin ? "block rounded-2xl border border-gray-100 bg-white p-3 lg:border-0 lg:bg-transparent lg:p-0" : "hidden lg:block"}>{filters}</aside>
+          <aside className={admin ? "order-2 block rounded-2xl border border-gray-100 bg-white p-3 lg:order-1 lg:border-0 lg:bg-transparent lg:p-0" : "hidden lg:block"}>{filters}</aside>
 
-          <div>
+          <div className={admin ? "order-1 lg:order-2" : undefined}>
             <div className="flex items-center justify-between gap-3">
               {admin ? null : (
               <button
@@ -1185,35 +1185,6 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
             ) : null}
 
             {visibleProducts.length > 0 ? (
-              admin ? (
-                <>
-                  <ul className="mt-2 divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-100 bg-white lg:hidden">
-                    {visibleProducts.map((product) => (
-                      <AdminProductRow
-                        key={product.id}
-                        product={product}
-                        onEdit={() => setEditingId(product.id)}
-                        onDragStart={(event) => writeProductDrag(event, product.id)}
-                      />
-                    ))}
-                  </ul>
-                  <ul className={`${storeProductGridClass} max-lg:hidden`}>
-                    {visibleProducts.map((product) => (
-                      <li key={product.id} className="min-w-0">
-                        <ProductCard
-                          product={product}
-                          onAddToCart={() => handleAddToCart(product)}
-                          onEdit={canManage ? () => setEditingId(product.id) : undefined}
-                          onEditImage={canManage ? () => setImageEditId(product.id) : undefined}
-                          onToggleHidden={canManage ? () => toggleProductHidden(product.id) : undefined}
-                          draggable={admin}
-                          onDragStart={(event) => writeProductDrag(event, product.id)}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
               <ul className={storeProductGridClass}>
                 {visibleProducts.map((product) => (
                   <li key={product.id} className="min-w-0">
@@ -1235,7 +1206,6 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                   </li>
                 ))}
               </ul>
-              )
             ) : (
               <p className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center text-base font-medium text-neutral-800">
                 No hay productos con esos filtros.
@@ -1350,40 +1320,6 @@ function TrashIcon() {
     <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.5 8h5l.5-8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
-  );
-}
-
-function AdminProductRow({
-  product,
-  onEdit,
-  onDragStart,
-}: {
-  product: CatalogProduct;
-  onEdit: () => void;
-  onDragStart: (event: DragEvent<HTMLElement>) => void;
-}) {
-  const soldOut = isStoreSoldOut(product);
-  return (
-    <li>
-      <button
-        type="button"
-        draggable
-        onDragStart={onDragStart}
-        onClick={onEdit}
-        className="flex w-full items-center gap-3 px-3 py-2.5 text-left active:bg-sky-50"
-      >
-        <img src={product.image} alt="" className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-neutral-950">{product.title}</span>
-          <span className="mt-0.5 block text-xs font-medium text-neutral-500">
-            {formatPrice(product.salePrice)}
-            {soldOut ? " · Agotado" : ""}
-            {product.storeHidden ? " · Oculto" : ""}
-          </span>
-        </span>
-        <span className="shrink-0 rounded-full bg-sky-500 px-3 py-1 text-xs font-bold text-white">Editar</span>
-      </button>
-    </li>
   );
 }
 
