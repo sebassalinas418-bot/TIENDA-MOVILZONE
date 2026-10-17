@@ -59,7 +59,6 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processHint, setProcessHint] = useState<string | null>(null);
-  const [dragActive, setDragActive] = useState(false);
   const [webSearchOpen, setWebSearchOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
 
@@ -234,14 +233,6 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
     event.target.value = "";
   }
 
-  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    setDragActive(false);
-    if (disabled || (stage !== "idle" && stage !== "awaiting")) return;
-    const file = event.dataTransfer.files?.[0];
-    if (file) stagePendingFile(file);
-  }
-
   function clearImage() {
     if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
     setPendingFile(null);
@@ -273,12 +264,9 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-slate-900">Foto del producto (POS)</p>
-      <p className="text-xs text-slate-500">
-        JPG, PNG o WebP · hasta 20 MB. Primero ves la foto y elegís si querés quitar el fondo (en tu
-        dispositivo, gratis) o subirla tal cual. La búsqueda web y el + agregan fotos extra, no reemplazan la principal.
-      </p>
+      <p className="text-xs text-slate-500">La foto grande es la principal. El + suma más fotos, no la reemplaza.</p>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-start gap-2">
         <div
           className={cn(
@@ -325,7 +313,7 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
               aria-label="Agregar otra foto"
               disabled={disabled || busy || extraImages.length >= MAX_PRODUCT_EXTRA_IMAGES}
               onClick={() => setPlusOpen((open) => !open)}
-              className="flex size-20 items-center justify-center rounded-xl border border-dashed border-sky-300 bg-sky-50 text-3xl font-light text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+              className="flex size-20 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-fuchsia-500 text-3xl font-light text-white shadow-sm hover:opacity-95 disabled:opacity-50"
             >
               +
             </button>
@@ -377,151 +365,101 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
           />
         </div>
 
-        <div className="min-w-0 flex-1 space-y-2">
-          <div
-            onDragOver={(event) => {
-              event.preventDefault();
-              if (!disabled && !busy) setDragActive(true);
-            }}
-            onDragLeave={() => setDragActive(false)}
-            onDrop={handleDrop}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleInputChange}
+          disabled={disabled || busy}
+        />
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleInputChange}
+          disabled={disabled || busy}
+        />
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => galleryInputRef.current?.click()}
+            disabled={disabled || busy}
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-sky-500 px-3 text-sm font-bold text-white shadow-sm hover:bg-sky-400 disabled:opacity-60"
+          >
+            Elegir de galería
+          </button>
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={disabled || busy}
+            className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-cyan-500 px-3 text-sm font-bold text-white shadow-sm hover:bg-cyan-400 disabled:opacity-60"
+          >
+            Sacá una foto
+          </button>
+          <button
+            type="button"
+            onClick={() => setWebSearchOpen(true)}
+            disabled={disabled || busy}
+            className="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-fuchsia-600 to-sky-500 px-3 text-sm font-bold text-white shadow-sm hover:opacity-95 disabled:opacity-60"
+          >
+            <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <circle cx="8.5" cy="8.5" r="5" />
+              <path d="M12.5 12.5 17 17" strokeLinecap="round" />
+            </svg>
+            Buscar foto en web
+          </button>
+          {awaiting ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void commitPending(true)}
+                disabled={disabled}
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-sky-600 px-3 text-sm font-bold text-white hover:bg-sky-500"
+              >
+                Quitar fondo y subir
+              </button>
+              <button
+                type="button"
+                onClick={() => void commitPending(false)}
+                disabled={disabled}
+                className="inline-flex min-h-11 items-center justify-center rounded-full bg-violet-500 px-3 text-sm font-bold text-white hover:bg-violet-400"
+              >
+                Subir así
+              </button>
+            </>
+          ) : null}
+          {preview ? (
+            <button
+              type="button"
+              onClick={clearImage}
+              disabled={disabled || busy}
+              className="col-span-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border-2 border-rose-200 bg-rose-50 px-3 text-sm font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-60"
+            >
+              Quitar
+            </button>
+          ) : null}
+        </div>
+
+        {processHint ? (
+          <p
             className={cn(
-              "rounded-xl border border-dashed px-4 py-5 text-center transition-colors",
-              dragActive ? "border-sky-400 bg-sky-50/70" : "border-slate-300 bg-white",
-              (disabled || busy) && "pointer-events-none opacity-60",
+              "inline-flex items-start gap-1.5 text-xs",
+              processHint.includes("¿Querés")
+                ? "text-slate-700"
+                : processHint.toLowerCase().includes("original")
+                  ? "text-amber-700"
+                  : "text-emerald-700",
             )}
           >
-            <svg viewBox="0 0 24 24" className="mx-auto size-5 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-              <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" />
-              <circle cx="12" cy="13.5" r="3.2" />
-            </svg>
-            <p className="mt-2 text-sm text-slate-700">
-              <button
-                type="button"
-                className="font-medium text-slate-800 underline-offset-2 hover:underline"
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={disabled || busy}
-              >
-                Sacá una foto
-              </button>
-              {" o "}
-              <button
-                type="button"
-                className="font-medium text-sky-700 underline-offset-2 hover:underline"
-                onClick={() => galleryInputRef.current?.click()}
-                disabled={disabled || busy}
-              >
-                elegí una imagen
-              </button>
-            </p>
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handleInputChange}
-              disabled={disabled || busy}
-            />
-            <input
-              ref={galleryInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleInputChange}
-              disabled={disabled || busy}
-            />
-          </div>
+            <span>{processHint}</span>
+          </p>
+        ) : null}
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => galleryInputRef.current?.click()}
-              disabled={disabled || busy}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-            >
-              <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-                <path d="M10 3.5v9" strokeLinecap="round" />
-                <path d="m6.5 7 3.5-3.5L13.5 7" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M4 12.5V15a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2.5" strokeLinecap="round" />
-              </svg>
-              Elegir de galería
-            </button>
-            <button
-              type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              disabled={disabled || busy}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-            >
-              Sacá una foto
-            </button>
-            <button
-              type="button"
-              onClick={() => setWebSearchOpen(true)}
-              disabled={disabled || busy}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-60"
-            >
-              <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-                <circle cx="8.5" cy="8.5" r="5" />
-                <path d="M12.5 12.5 17 17" strokeLinecap="round" />
-              </svg>
-              Buscar foto en web
-            </button>
-            {awaiting ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void commitPending(true)}
-                  disabled={disabled}
-                  className="inline-flex items-center rounded-lg bg-sky-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-sky-400"
-                >
-                  Quitar fondo y subir
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void commitPending(false)}
-                  disabled={disabled}
-                  className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
-                >
-                  Subir así
-                </button>
-              </>
-            ) : null}
-            {preview ? (
-              <button
-                type="button"
-                onClick={clearImage}
-                disabled={disabled || busy}
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-              >
-                <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-                  <path d="M5 5l10 10M15 5 5 15" strokeLinecap="round" />
-                </svg>
-                Quitar
-              </button>
-            ) : null}
-          </div>
-
-          {processHint ? (
-            <p
-              className={cn(
-                "inline-flex items-start gap-1.5 text-xs",
-                processHint.includes("¿Querés")
-                  ? "text-slate-700"
-                  : processHint.toLowerCase().includes("original")
-                    ? "text-amber-700"
-                    : "text-emerald-700",
-              )}
-            >
-              <svg viewBox="0 0 20 20" className="mt-0.5 size-3.5 shrink-0" fill="currentColor" aria-hidden="true">
-                <path d="M10 2.5 12 8l5.5.4-4.2 3.6 1.3 5.3L10 14.6 5.4 17.3 6.7 12 2.5 8.4 8 8 10 2.5Z" />
-              </svg>
-              <span>{processHint}</span>
-            </p>
-          ) : null}
-
-          {error ? <p className="text-xs text-rose-600">{error}</p> : null}
-        </div>
+        {error ? <p className="text-xs text-rose-600">{error}</p> : null}
       </div>
       <StoreWebImageSearch
         open={webSearchOpen}
