@@ -6,6 +6,11 @@ import { useStoreConfig } from "@/config/store-config";
 import { useOrders } from "@/lib/orders";
 import { fetchTallerCatalog, pushTallerProduct } from "@/services/taller-gestio/browser";
 import { persistStoreProductImage } from "@/lib/store-product-images/client-upload";
+import {
+  loadExtraImagesOverlay,
+  normalizeExtraImages,
+  saveExtraImagesOverlay,
+} from "@/lib/store-product-images/extras";
 import { isPersistableProductImage, pickCatalogImage } from "@/lib/store-product-images/public-url";
 import {
   categorySignature,
@@ -53,6 +58,7 @@ export type NewProductInput = {
   subcategoryId: string;
   brand: string;
   image: string;
+  extraImages?: string[];
   stock: number;
   offer: ProductOffer;
   details?: string;
@@ -68,6 +74,7 @@ export type ProductPatch = {
   categoryId?: string;
   subcategoryId?: string;
   details?: string;
+  extraImages?: string[];
 };
 
 type CatalogContextValue = {
@@ -292,6 +299,7 @@ export function CatalogProvider({
   const [placements, setPlacements] = useState<Record<string, StoreProductPlacement>>({});
   const [images, setImages] = useState<Record<string, string>>({});
   const [details, setDetails] = useState<Record<string, string>>({});
+  const [extraImages, setExtraImages] = useState<Record<string, string[]>>({});
   const [hidden, setHidden] = useState<Record<string, true>>(() => {
     const next: Record<string, true> = {};
     for (const id of initialHidden) {
@@ -308,6 +316,7 @@ export function CatalogProvider({
     setPlacements(loadProductPlacements());
     setImages(loadImages());
     setDetails(loadProductDetails());
+    setExtraImages(loadExtraImagesOverlay());
     const localHidden = loadHidden();
     setHidden((current) => (Object.keys(current).length > 0 ? current : localHidden));
     setReady(true);
@@ -323,10 +332,11 @@ export function CatalogProvider({
       window.localStorage.setItem(IMAGES_KEY, JSON.stringify(images));
       window.localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden));
       saveProductDetails(details);
+      saveExtraImagesOverlay(extraImages);
     } catch {
       /* data URLs / plantillas de Redes pueden llenar la cuota */
     }
-  }, [extras, offers, prices, placements, images, hidden, details, ready]);
+  }, [extras, offers, prices, placements, images, hidden, details, extraImages, ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -402,7 +412,8 @@ export function CatalogProvider({
         const response = await fetch("/api/store-overlay", { cache: "no-store" });
         if (!response.ok) return;
         const body = (await response.json()) as { hidden?: unknown };
-        if (cancel || !Array.isArray(body.hidden)) return;
+        if (cancel) return;
+        if (!Array.isArray(body.hidden)) return;
         const next: Record<string, true> = {};
         for (const id of body.hidden) {
           if (typeof id === "string" && id) next[id] = true;
@@ -426,6 +437,24 @@ export function CatalogProvider({
         });
       } catch {
         /* se mantiene el overlay local */
+      }
+      try {
+        const galleryResponse = await fetch("/api/store-product-gallery", { cache: "no-store" });
+        if (!galleryResponse.ok) return;
+        const galleryBody = (await galleryResponse.json()) as { galleries?: Record<string, unknown> };
+        if (cancel || !galleryBody.galleries || typeof galleryBody.galleries !== "object") return;
+        const next: Record<string, string[]> = {};
+        for (const [id, value] of Object.entries(galleryBody.galleries)) {
+          const extrasForProduct = normalizeExtraImages(value);
+          if (id && extrasForProduct.length) next[id] = extrasForProduct;
+        }
+        setExtraImages((current) => {
+          const currentKeys = JSON.stringify(current);
+          const nextKeys = JSON.stringify(next);
+          return currentKeys === nextKeys ? current : { ...current, ...next };
+        });
+      } catch {
+        /* se mantiene la galería local */
       }
     }
 
@@ -460,8 +489,9 @@ export function CatalogProvider({
         ),
         storeHidden: Boolean(hidden[product.id]),
         details: details[product.id] || product.details || undefined,
+        extraImages: extraImages[product.id] || product.extraImages || [],
       })),
-    [details, extras, hidden, images, offers, prices, remote],
+    [details, extraImages, extras, hidden, images, offers, prices, remote],
   );
 
   function saveOffer(productId: string, offer: ProductOffer) {
@@ -498,6 +528,21 @@ export function CatalogProvider({
         else delete next[productId];
         return next;
       });
+    }
+    if (patch.extraImages) {
+      const extrasForProduct = normalizeExtraImages(patch.extraImages, patch.image);
+      setExtraImages((current) => ({ ...current, [productId]: extrasForProduct }));
+      setExtras((current) =>
+        current.map((item) => (item.id === productId ? { ...item, extraImages: extrasForProduct } : item)),
+      );
+      if (!productId.startsWith("extra-")) {
+        void fetch("/api/store-product-gallery", {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId, extras: extrasForProduct }),
+        });
+      }
     }
     if (patch.title?.trim()) {
       const title = patch.title.trim();
@@ -577,12 +622,22 @@ export function CatalogProvider({
       onSale: false,
       isNew: false,
       details: detailsText || undefined,
+      extraImages: normalizeExtraImages(input.extraImages, input.image),
     };
     setExtras((current) => [...current, product]);
     setOffers((current) => ({ ...current, [id]: input.offer }));
     setProductStock(id, input.stock);
     if (detailsText) {
       setDetails((current) => ({ ...current, [id]: detailsText }));
+    }
+    if (product.extraImages?.length && !id.startsWith("extra-")) {
+      setExtraImages((current) => ({ ...current, [id]: product.extraImages ?? [] }));
+      void fetch("/api/store-product-gallery", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: id, extras: product.extraImages }),
+      });
     }
     return id;
   }

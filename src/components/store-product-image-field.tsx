@@ -1,9 +1,12 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { StoreWebImageSearch, type WebImageChoice } from "@/components/store-web-image-search";
 import { prepareProductImageFile } from "@/lib/admin-image-tools/prepare-product-image";
 import { removeProductImageBackground } from "@/lib/admin-image-tools/remove-product-image-background";
 import { uploadStoreProductImage } from "@/lib/store-product-images/client-upload";
+import { compressWebProductFile } from "@/lib/store-product-images/compress-web";
+import { MAX_PRODUCT_EXTRA_IMAGES, normalizeExtraImages } from "@/lib/store-product-images/extras";
 
 type StoreProductImageFieldProps = {
   value: string;
@@ -11,6 +14,9 @@ type StoreProductImageFieldProps = {
   onError?: (message: string) => void;
   onPendingFile?: (file: File | null) => void;
   productId?: string;
+  productName?: string;
+  extraImages?: string[];
+  onExtraImagesChange?: (urls: string[]) => void;
   disabled?: boolean;
 };
 
@@ -31,17 +37,31 @@ function cn(...parts: Array<string | false | undefined>) {
  */
 export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, StoreProductImageFieldProps>(
   function StoreProductImageField(
-    { value, onChange, onError, onPendingFile, productId, disabled = false },
+    {
+      value,
+      onChange,
+      onError,
+      onPendingFile,
+      productId,
+      productName = "",
+      extraImages = [],
+      onExtraImagesChange,
+      disabled = false,
+    },
     ref,
   ) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const extraGalleryInputRef = useRef<HTMLInputElement>(null);
+  const extraCameraInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(value || null);
   const [stage, setStage] = useState<ProcessStage>("idle");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processHint, setProcessHint] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [webSearchOpen, setWebSearchOpen] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
 
   useEffect(() => {
     if (stage === "awaiting") return;
@@ -137,6 +157,77 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
     [pendingFile],
   );
 
+  function hasMainPhoto() {
+    return Boolean((preview && preview !== "") || value?.trim());
+  }
+
+  function pushExtra(url: string) {
+    const next = normalizeExtraImages([...extraImages, url], value);
+    if (next.length === extraImages.length) {
+      reportError("Esa foto ya está en el producto o se alcanzó el máximo.");
+      return false;
+    }
+    onExtraImagesChange?.(next);
+    return true;
+  }
+
+  async function uploadPickedFile(file: File, asExtra: boolean) {
+    setError(null);
+    onError?.("");
+    setProcessHint(null);
+    setStage("compressing");
+    try {
+      const compressed = await compressWebProductFile(file);
+      setStage("uploading");
+      const url = await uploadStoreProductImage(compressed, asExtra ? undefined : productId, { asIs: true });
+      if (asExtra) {
+        if (pushExtra(url)) setProcessHint("Foto extra agregada. Guardá el producto para conservarla.");
+      } else {
+        setPendingFile(null);
+        onPendingFile?.(null);
+        onChange(url);
+        setPreview(url);
+        setProcessHint("Foto de la web lista para guardar.");
+      }
+      setWebSearchOpen(false);
+      setPlusOpen(false);
+    } catch (uploadError) {
+      reportError(uploadError instanceof Error ? uploadError.message : "No se pudo usar esa foto.");
+    } finally {
+      setStage("idle");
+    }
+  }
+
+  async function applyWebImage(hit: WebImageChoice) {
+    setError(null);
+    onError?.("");
+    setProcessHint(null);
+    setStage("compressing");
+    try {
+      const response = await fetch(`/api/store-image-fetch?url=${encodeURIComponent(hit.url)}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("No se pudo descargar esa foto.");
+      const blob = await response.blob();
+      const downloaded = new File([blob], "producto-web.jpg", { type: blob.type || "image/jpeg" });
+      await uploadPickedFile(downloaded, hasMainPhoto());
+    } catch (webError) {
+      setStage("idle");
+      reportError(webError instanceof Error ? webError.message : "No se pudo usar esa foto.");
+    }
+  }
+
+  async function addExtraFromInput(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      reportError("Elegí un archivo de imagen.");
+      return;
+    }
+    await uploadPickedFile(file, true);
+  }
+
   function handleInputChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (file) stagePendingFile(file);
@@ -184,10 +275,11 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
       <p className="text-sm font-medium text-slate-900">Foto del producto (POS)</p>
       <p className="text-xs text-slate-500">
         JPG, PNG o WebP · hasta 20 MB. Primero ves la foto y elegís si querés quitar el fondo (en tu
-        dispositivo, gratis) o subirla tal cual.
+        dispositivo, gratis) o subirla tal cual. La búsqueda web y el + agregan fotos extra, no reemplazan la principal.
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="flex flex-wrap items-start gap-2">
         <div
           className={cn(
             "relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0]",
@@ -210,6 +302,79 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
               <span className="text-[10px] font-medium text-sky-800">{stageLabel}</span>
             </div>
           ) : null}
+        </div>
+          {extraImages.map((src) => (
+            <div key={src} className="relative size-20 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <img src={src} alt="" className="size-full object-contain" />
+              <button
+                type="button"
+                aria-label="Quitar foto extra"
+                disabled={disabled || busy}
+                onClick={() =>
+                  onExtraImagesChange?.(extraImages.filter((item) => item !== src))
+                }
+                className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-xs text-slate-700 shadow-sm"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <div className="relative">
+            <button
+              type="button"
+              aria-label="Agregar otra foto"
+              disabled={disabled || busy || extraImages.length >= MAX_PRODUCT_EXTRA_IMAGES}
+              onClick={() => setPlusOpen((open) => !open)}
+              className="flex size-20 items-center justify-center rounded-xl border border-dashed border-sky-300 bg-sky-50 text-3xl font-light text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+            >
+              +
+            </button>
+            {plusOpen ? (
+              <div className="absolute top-full left-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                <button
+                  type="button"
+                  className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  onClick={() => extraGalleryInputRef.current?.click()}
+                >
+                  Galería
+                </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  onClick={() => extraCameraInputRef.current?.click()}
+                >
+                  Cámara
+                </button>
+                <button
+                  type="button"
+                  className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  onClick={() => {
+                    setPlusOpen(false);
+                    setWebSearchOpen(true);
+                  }}
+                >
+                  Buscar en web
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <input
+            ref={extraGalleryInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(event) => void addExtraFromInput(event)}
+            disabled={disabled || busy}
+          />
+          <input
+            ref={extraCameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(event) => void addExtraFromInput(event)}
+            disabled={disabled || busy}
+          />
         </div>
 
         <div className="min-w-0 flex-1 space-y-2">
@@ -290,6 +455,18 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
             >
               Sacá una foto
             </button>
+            <button
+              type="button"
+              onClick={() => setWebSearchOpen(true)}
+              disabled={disabled || busy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-60"
+            >
+              <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                <circle cx="8.5" cy="8.5" r="5" />
+                <path d="M12.5 12.5 17 17" strokeLinecap="round" />
+              </svg>
+              Buscar foto en web
+            </button>
             {awaiting ? (
               <>
                 <button
@@ -346,6 +523,15 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
           {error ? <p className="text-xs text-rose-600">{error}</p> : null}
         </div>
       </div>
+      <StoreWebImageSearch
+        open={webSearchOpen}
+        defaultQuery={productName}
+        busy={busy}
+        onClose={() => {
+          if (!busy) setWebSearchOpen(false);
+        }}
+        onPick={(hit) => void applyWebImage(hit)}
+      />
     </div>
   );
   },

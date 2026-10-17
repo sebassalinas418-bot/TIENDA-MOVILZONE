@@ -77,7 +77,9 @@ export function ProductDetailScreen() {
 
   const gallery = useMemo(() => {
     if (!product) return [];
-    return [product.image].filter((src, index, all) => src && all.indexOf(src) === index);
+    return [product.image, ...(product.extraImages ?? [])].filter(
+      (src, index, all) => src && all.indexOf(src) === index,
+    );
   }, [product]);
 
   const related = useMemo(() => {

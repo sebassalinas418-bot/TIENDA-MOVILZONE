@@ -14,6 +14,7 @@ export type Product = {
   brand: string;
   price: number;
   image: string;
+  extraImages?: string[];
   stock: number;
   stockLabel: string;
   inStock: boolean;

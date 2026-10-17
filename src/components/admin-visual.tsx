@@ -48,6 +48,7 @@ export function ProductEditModal({
   const [price, setPrice] = useState(String(product.price));
   const [stockValue, setStockValue] = useState(String(stock));
   const [image, setImage] = useState(product.image);
+  const [extraImages, setExtraImages] = useState<string[]>(product.extraImages ?? []);
   const [imageError, setImageError] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<OfferDraft>(draftFrom(offer));
@@ -86,6 +87,7 @@ export function ProductEditModal({
               stock: Math.floor(numericStock),
               offer: offerFrom(draft),
               image: imageUrlForProductSave(uploaded || image),
+              extraImages,
             };
             await onSave(payload);
           })()
@@ -104,6 +106,9 @@ export function ProductEditModal({
           onPendingFile={setPendingFile}
           autoIsolate
           productId={product.id}
+          productName={title}
+          extraImages={extraImages}
+          onExtraImagesChange={setExtraImages}
         />
         <ProductAiFillButton
           image={image}
@@ -228,6 +233,7 @@ export function NewProductModal({
   const [stock, setStock] = useState("1");
   const [draft, setDraft] = useState<OfferDraft>({ active: false, kind: "percent", value: "10" });
   const [image, setImage] = useState("");
+  const [extraImages, setExtraImages] = useState<string[]>([]);
   const [imageError, setImageError] = useState("");
   const [details, setDetails] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -266,6 +272,7 @@ export function NewProductModal({
               subcategoryId,
               brand,
               image: imageUrlForProductSave(uploaded || image),
+              extraImages,
               stock: Math.floor(numericStock),
               offer: offerFrom(draft),
               details: details.trim(),
@@ -305,6 +312,9 @@ export function NewProductModal({
           onChange={setImage}
           onError={setImageError}
           onPendingFile={setPendingFile}
+          productName={title}
+          extraImages={extraImages}
+          onExtraImagesChange={setExtraImages}
         />
         <ProductAiFillButton
           image={image}
@@ -523,8 +533,14 @@ const ImagePicker = forwardRef<
     onPendingFile?: (file: File | null) => void;
     autoIsolate?: boolean;
     productId?: string;
+    productName?: string;
+    extraImages?: string[];
+    onExtraImagesChange?: (urls: string[]) => void;
   }
->(function ImagePicker({ value, onChange, onError, onPendingFile, productId }, ref) {
+>(function ImagePicker(
+  { value, onChange, onError, onPendingFile, productId, productName, extraImages, onExtraImagesChange },
+  ref,
+) {
   return (
     <StoreProductImageField
       ref={ref}
@@ -533,6 +549,9 @@ const ImagePicker = forwardRef<
       onError={onError}
       onPendingFile={onPendingFile}
       productId={productId}
+      productName={productName}
+      extraImages={extraImages}
+      onExtraImagesChange={onExtraImagesChange}
     />
   );
 });
