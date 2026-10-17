@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import { toJpeg } from "html-to-image";
 import { redesCardImageSrc } from "@/lib/store-redes/product-image";
 import {
@@ -30,39 +30,44 @@ export const InstagramProductCard = forwardRef<HTMLDivElement, InstagramProductC
     const zones = layout ?? templateLayout(templateId || DEFAULT_TEMPLATE_ID);
     const bullets = features.map(cleanFeature).filter(Boolean).slice(0, 3);
     const photo = redesCardImageSrc(image);
-    const customBg = templateId === CUSTOM_TEMPLATE_ID ? templateSrc.trim() : "";
+    const background = templateSrc.trim();
     const kind = zones.kind;
+    const baked = Boolean(zones.baked);
+    const hidePanel = Boolean(zones.hidePanel);
+    const portrait = zones.ratio === "4:5";
+    const frame = portrait
+      ? { width: 540, height: 675, minWidth: 540, minHeight: 675 }
+      : { width: 540, height: 540, minWidth: 540, minHeight: 540 };
 
     return (
       <div
         ref={ref}
-        className="relative aspect-square overflow-hidden bg-[#020617] text-white"
-        style={{ width: 540, height: 540, minWidth: 540, minHeight: 540 }}
+        className={`relative overflow-hidden bg-[#020617] text-white ${portrait ? "aspect-[4/5]" : "aspect-square"}`}
+        style={frame}
       >
-        {customBg ? (
+        {background ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={customBg} alt="" crossOrigin="anonymous" className="absolute inset-0 z-0 h-full w-full object-cover" />
+          <img src={background} alt="" crossOrigin="anonymous" className="absolute inset-0 z-0 h-full w-full object-cover" />
         ) : (
           <Backdrop kind={kind} />
         )}
+        {zones.coverRight ? <div className="absolute inset-y-0 right-0 z-[1] w-[50%] bg-[#071627]" /> : null}
 
         {photo ? (
           <div className={zones.product}>
-            <div className="absolute inset-x-[12%] bottom-[6%] h-12 rounded-full bg-cyan-400/40 blur-2xl" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photo}
-              alt={title}
-              crossOrigin="anonymous"
-              className="relative z-[1] h-full w-full object-contain drop-shadow-[0_12px_40px_rgba(34,211,238,0.45)]"
-            />
+            {baked || hidePanel || zones.knockout ? null : (
+              <div className="absolute inset-x-[12%] bottom-[6%] h-12 rounded-full bg-cyan-400/40 blur-2xl" />
+            )}
+            {zones.knockout ? <div className="absolute inset-x-[8%] bottom-[4%] h-16 rounded-full bg-cyan-300/25 blur-3xl" /> : null}
+            <KnockoutPhoto src={photo} alt={title} enabled={Boolean(zones.knockout)} />
           </div>
         ) : null}
 
+        {hidePanel ? null : (
         <div className={zones.panel}>
-          {kind !== "hero" ? <StockChip /> : null}
+          {kind !== "hero" && !zones.hideStock ? <StockChip /> : null}
           <h2 className={zones.title}>{shortenTitle(title)}</h2>
-          {headline ? <p className={zones.headline}>{shortHeadline(headline)}</p> : null}
+          {headline ? <p className={zones.headline}>{baked ? `✨ ${shortHeadline(headline)}` : shortHeadline(headline)}</p> : null}
           {kind !== "hero" ? (
             <ul className={zones.features}>
               {bullets.map((item) => (
@@ -71,8 +76,9 @@ export const InstagramProductCard = forwardRef<HTMLDivElement, InstagramProductC
             </ul>
           ) : null}
         </div>
+        )}
 
-        {kind === "hero" ? (
+        {kind === "hero" && !hidePanel ? (
           <ul className={zones.features}>
             {bullets.map((item) => (
               <Feature key={item} label={item} kind={kind} />
@@ -80,11 +86,82 @@ export const InstagramProductCard = forwardRef<HTMLDivElement, InstagramProductC
           </ul>
         ) : null}
 
-        <div className={zones.price}>{priceLabel}</div>
+        <div className={zones.price}>
+          {baked ? (
+            <>
+              <span className="text-[26px] leading-none font-black tracking-tight text-white drop-shadow-[0_0_12px_rgba(34,211,238,0.65)]">
+                {priceLabel}
+              </span>
+              <span className="mt-1 text-[9px] font-bold tracking-[0.22em] text-cyan-100/90 uppercase">
+                Precio de contado
+              </span>
+            </>
+          ) : (
+            priceLabel
+          )}
+        </div>
       </div>
     );
   },
 );
+
+function KnockoutPhoto({ src, alt, enabled }: { src: string; alt: string; enabled: boolean }) {
+  const [cut, setCut] = useState(src);
+
+  useEffect(() => {
+    if (!enabled || !src) {
+      setCut(src);
+      return;
+    }
+    let cancel = false;
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        context.drawImage(image, 0, 0);
+        const data = context.getImageData(0, 0, canvas.width, canvas.height);
+        const pixels = data.data;
+        for (let i = 0; i < pixels.length; i += 4) {
+          const r = pixels[i];
+          const g = pixels[i + 1];
+          const b = pixels[i + 2];
+          if (r > 236 && g > 236 && b > 236) {
+            pixels[i + 3] = 0;
+          } else if (r > 208 && g > 208 && b > 208) {
+            const fade = (Math.min(r, g, b) - 208) / 48;
+            pixels[i + 3] = Math.round(pixels[i + 3] * (1 - fade));
+          }
+        }
+        context.putImageData(data, 0, 0);
+        if (!cancel) setCut(canvas.toDataURL("image/png"));
+      } catch {
+        if (!cancel) setCut(src);
+      }
+    };
+    image.onerror = () => {
+      if (!cancel) setCut(src);
+    };
+    image.src = src;
+    return () => {
+      cancel = true;
+    };
+  }, [enabled, src]);
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={cut}
+      alt={alt}
+      crossOrigin="anonymous"
+      className="relative z-[1] h-full w-full object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,0.55)]"
+    />
+  );
+}
 
 function Backdrop({ kind }: { kind: TemplateKind }) {
   return (
@@ -151,6 +228,16 @@ function StockChip() {
 }
 
 function Feature({ label, kind }: { label: string; kind: TemplateKind }) {
+  if (kind === "right") {
+    return (
+      <li className="flex items-center gap-2 rounded-2xl border border-cyan-300/50 bg-[#04111f]/75 px-2.5 py-1.5 backdrop-blur-[2px]">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-400 text-[10px] font-black text-black shadow-[0_0_12px_rgba(34,211,238,0.9)]">
+          ✓
+        </span>
+        <span className="text-[10px] leading-tight font-bold tracking-wide text-white uppercase">{label}</span>
+      </li>
+    );
+  }
   if (kind === "hero") {
     return (
       <li className="flex max-w-[31%] flex-col items-center gap-1 rounded-2xl border border-cyan-400/40 bg-black/45 px-2 py-2 text-center backdrop-blur-sm">
@@ -170,12 +257,14 @@ function Feature({ label, kind }: { label: string; kind: TemplateKind }) {
 }
 
 export async function downloadInstagramProductCard(node: HTMLElement, fileName: string) {
+  const width = Math.round(node.offsetWidth) || 540;
+  const height = Math.round(node.offsetHeight) || width;
   const dataUrl = await toJpeg(node, {
     quality: 0.95,
     pixelRatio: 2,
     cacheBust: true,
-    width: 540,
-    height: 540,
+    width,
+    height,
     backgroundColor: "#020617",
   });
   const link = document.createElement("a");

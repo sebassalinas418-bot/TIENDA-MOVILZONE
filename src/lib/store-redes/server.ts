@@ -205,6 +205,22 @@ export async function runDueSocialPosts(shopId: string) {
   return { ok: true as const, ran: true as const, post: published.post ?? generated.post, publish: published };
 }
 
+export async function deleteSocialPost(shopId: string, id: string) {
+  const client = socialDb();
+  if (!client) return { ok: false as const, error: "Sin conexión para borrar el post." };
+  const { error } = await client.from(POSTS).delete().eq("id", id).eq("shop_id", shopId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const, id };
+}
+
+export async function clearSocialPosts(shopId: string) {
+  const client = socialDb();
+  if (!client) return { ok: false as const, error: "Sin conexión para vaciar la cola." };
+  const { error } = await client.from(POSTS).delete().eq("shop_id", shopId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const };
+}
+
 async function persistPost(shopId: string, post: SocialPost) {
   const client = socialDb();
   if (!client) return { ok: false as const, error: "Sin tabla de posts todavía.", post };

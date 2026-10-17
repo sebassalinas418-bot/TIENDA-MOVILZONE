@@ -4,6 +4,12 @@ export type TemplateKind = "left" | "right" | "hero" | "stack" | "minimal";
 
 export type TemplateLayout = {
   kind: TemplateKind;
+  baked?: boolean;
+  coverRight?: boolean;
+  hidePanel?: boolean;
+  hideStock?: boolean;
+  knockout?: boolean;
+  ratio?: "1:1" | "4:5";
   product: string;
   panel: string;
   title: string;
@@ -28,55 +34,63 @@ export const OFFICIAL_REDES_TEMPLATES: OfficialRedesTemplate[] = [
   {
     id: "mz-hero",
     name: "Volt",
-    hint: "Neón a full, foto izquierda y ficha a la derecha.",
-    src: "",
+    hint: "Plantilla maestra: logo MZ, hueco a la izquierda y ficha a la derecha.",
+    src: "/redes/plantilla-mz-master.jpg",
     thumb: "bg-[linear-gradient(215deg,#67e8f9_0%,#0891b2_32%,#020617_70%)]",
     layout: {
       kind: "left",
-      product: "absolute left-4 top-[16%] z-10 h-[66%] w-[46%]",
-      panel: "absolute top-[15%] right-4 z-10 flex w-[46%] flex-col gap-2.5 text-white",
+      baked: true,
+      coverRight: true,
+      product: "absolute left-[2%] top-[22%] z-10 h-[72%] w-[49%]",
+      panel: "absolute top-[19%] right-[3.5%] z-10 flex w-[45%] flex-col gap-2 text-white",
       title:
-        "text-[22px] leading-[1.05] font-black tracking-tight text-white uppercase drop-shadow-[0_0_18px_rgba(34,211,238,0.55)]",
-      headline: "text-[11px] font-bold tracking-[0.14em] text-cyan-300 uppercase",
-      features: "mt-1 flex flex-col gap-2",
+        "text-[21px] leading-[1.02] font-black tracking-tight text-cyan-300 uppercase drop-shadow-[0_0_16px_rgba(34,211,238,0.75)]",
+      headline: "text-[11px] font-bold tracking-wide text-white/90",
+      features: "mt-1 flex flex-col gap-1.5",
       price:
-        "absolute bottom-7 right-4 z-20 rounded-2xl bg-cyan-400 px-4 py-2 text-[26px] font-black text-black shadow-[0_0_30px_rgba(34,211,238,0.7)]",
+        "absolute right-[3.5%] bottom-[6.5%] z-20 flex w-[44%] flex-col items-center rounded-[1.4rem] border border-cyan-300/80 bg-[#04111f]/90 px-3 py-2.5 shadow-[0_0_28px_rgba(34,211,238,0.45)]",
     },
   },
   {
     id: "mz-split",
     name: "Mirror",
-    hint: "Textos a la izquierda y producto a la derecha.",
-    src: "",
+    hint: "Local MZ vertical: producto recortado, características y precio.",
+    src: "/redes/plantilla-mz-mirror.jpg",
     thumb: "bg-[linear-gradient(135deg,#020617_40%,#22d3ee_100%)]",
     layout: {
       kind: "right",
-      product: "absolute right-4 top-[16%] z-10 h-[66%] w-[46%]",
-      panel: "absolute top-[15%] left-4 z-10 flex w-[46%] flex-col gap-2.5 text-white",
+      hideStock: true,
+      knockout: true,
+      ratio: "4:5",
+      product: "absolute left-[3%] top-[18%] z-10 h-[54%] w-[56%]",
+      panel: "absolute top-[24%] right-[4%] z-10 flex w-[41%] flex-col gap-2 text-white",
       title:
-        "text-[22px] leading-[1.05] font-black tracking-tight text-white uppercase drop-shadow-[0_0_18px_rgba(34,211,238,0.55)]",
-      headline: "text-[11px] font-bold tracking-[0.14em] text-cyan-300 uppercase",
-      features: "mt-1 flex flex-col gap-2",
+        "text-[17px] leading-[1.05] font-black tracking-tight text-cyan-300 uppercase drop-shadow-[0_0_14px_rgba(34,211,238,0.7)]",
+      headline: "text-[10px] font-semibold leading-snug text-white/90",
+      features: "mt-1 flex flex-col gap-1.5",
       price:
-        "absolute bottom-7 left-4 z-20 rounded-2xl border-2 border-cyan-300 bg-black/70 px-4 py-2 text-[26px] font-black text-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.45)]",
+        "absolute right-[6%] bottom-[11.5%] z-20 flex h-[13%] w-[40%] items-center justify-center text-center text-[28px] font-black tracking-tight text-white drop-shadow-[0_0_14px_rgba(34,211,238,0.7)]",
     },
   },
   {
     id: "mz-stage",
     name: "Spotlight",
-    hint: "Producto al centro con halo, como story.",
-    src: "",
+    hint: "Circuito MZ: producto al centro, características y precio en el recuadro.",
+    src: "/redes/plantilla-mz-spotlight.jpg",
     thumb: "bg-[radial-gradient(circle_at_50%_42%,#22d3ee_0%,#083344_38%,#020617_72%)]",
     layout: {
-      kind: "hero",
-      product: "absolute top-[24%] left-1/2 z-10 h-[50%] w-[78%] -translate-x-1/2",
-      panel: "absolute top-9 right-5 left-5 z-10 flex flex-col items-center gap-1.5 text-center text-white",
+      kind: "right",
+      hideStock: true,
+      knockout: true,
+      ratio: "4:5",
+      product: "absolute left-[6%] top-[20%] z-10 h-[50%] w-[55%]",
+      panel: "absolute top-[26%] right-[4%] z-10 flex w-[40%] flex-col gap-2 text-white",
       title:
-        "text-[26px] leading-[0.95] font-black tracking-tight text-white uppercase drop-shadow-[0_0_22px_rgba(34,211,238,0.7)]",
-      headline: "rounded-full bg-cyan-400 px-3 py-0.5 text-[10px] font-black tracking-wide text-black uppercase",
-      features: "absolute bottom-[4.6rem] left-4 right-4 z-10 flex flex-row justify-center gap-2",
+        "text-[17px] leading-[1.05] font-black tracking-tight text-cyan-300 uppercase drop-shadow-[0_0_14px_rgba(34,211,238,0.7)]",
+      headline: "text-[10px] font-semibold leading-snug text-white/90",
+      features: "mt-1 flex flex-col gap-1.5",
       price:
-        "absolute bottom-6 left-1/2 z-20 -translate-x-1/2 text-[34px] font-black tracking-tight text-cyan-300 drop-shadow-[0_0_20px_rgba(34,211,238,0.9)]",
+        "absolute right-[6%] bottom-[11.5%] z-20 flex h-[13%] w-[40%] items-center justify-center text-center text-[28px] font-black tracking-tight text-white drop-shadow-[0_0_14px_rgba(34,211,238,0.7)]",
     },
   },
   {
@@ -115,7 +129,13 @@ export const OFFICIAL_REDES_TEMPLATES: OfficialRedesTemplate[] = [
   },
 ];
 
-const CUSTOM_LAYOUT: TemplateLayout = OFFICIAL_REDES_TEMPLATES[0].layout;
+const CUSTOM_LAYOUT: TemplateLayout = {
+  ...OFFICIAL_REDES_TEMPLATES[0].layout,
+  baked: false,
+  coverRight: false,
+  hidePanel: false,
+  ratio: "1:1",
+};
 
 export function officialTemplate(id?: string | null) {
   return OFFICIAL_REDES_TEMPLATES.find((item) => item.id === id) ?? OFFICIAL_REDES_TEMPLATES[0];
@@ -123,7 +143,7 @@ export function officialTemplate(id?: string | null) {
 
 export function templateSrc(id?: string | null, customSrc?: string) {
   if (id === CUSTOM_TEMPLATE_ID && customSrc) return customSrc;
-  return "";
+  return officialTemplate(id).src;
 }
 
 export function templateLayout(id?: string | null): TemplateLayout {

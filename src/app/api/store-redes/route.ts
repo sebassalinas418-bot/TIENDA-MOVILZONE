@@ -1,6 +1,8 @@
 import { connection } from "next/server";
 import { canAccessStoreRedesRequest } from "@/lib/store-redes/access";
 import {
+  clearSocialPosts,
+  deleteSocialPost,
   generateSocialPost,
   listSocialPosts,
   publishSocialPost,
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
   if ("error" in shop) return shop.error;
   try {
     const body = (await request.json()) as {
-      action?: "generate" | "publish" | "schedule" | "tick";
+      action?: "generate" | "publish" | "schedule" | "tick" | "discard" | "discard-all";
       product?: SocialProductSnap;
       products?: SocialProductSnap[];
       random?: boolean;
@@ -60,6 +62,15 @@ export async function POST(request: Request) {
     };
     if (body.action === "tick") {
       return Response.json(await runDueSocialPosts(shop.shopId));
+    }
+    if (body.action === "discard") {
+      if (!body.id) return Response.json({ ok: false, error: "Falta el post." }, { status: 400 });
+      const result = await deleteSocialPost(shop.shopId, body.id);
+      return Response.json(result, { status: result.ok ? 200 : 400 });
+    }
+    if (body.action === "discard-all") {
+      const result = await clearSocialPosts(shop.shopId);
+      return Response.json(result, { status: result.ok ? 200 : 400 });
     }
     if (body.action === "publish") {
       if (!body.id) return Response.json({ ok: false, error: "Falta el post." }, { status: 400 });

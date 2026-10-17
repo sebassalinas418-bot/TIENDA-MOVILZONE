@@ -225,6 +225,45 @@ export function AdminRedes() {
     }
   }
 
+  async function discard(id: string) {
+    const next = posts.filter((item) => item.id !== id);
+    setPosts(next);
+    writeLocalPosts(next);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/store-redes", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "discard", id }),
+      });
+      const body = (await response.json()) as { ok?: boolean; error?: string };
+      if (!body.ok) setError(body.error || "Se sacó de esta pantalla. No se pudo borrar en el servidor.");
+    } catch {
+      setError("Se sacó de esta pantalla. No se pudo borrar en el servidor.");
+    }
+  }
+
+  async function discardAll() {
+    setPosts([]);
+    writeLocalPosts([]);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/store-redes", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "discard-all" }),
+      });
+      const body = (await response.json()) as { ok?: boolean; error?: string };
+      if (!body.ok) setError(body.error || "Se vació acá. No se pudo borrar en el servidor.");
+    } catch {
+      setError("Se vació acá. No se pudo borrar en el servidor.");
+    }
+  }
+
   async function publish(id: string) {
     setBusy(id);
     setError("");
@@ -480,7 +519,12 @@ export function AdminRedes() {
                         selectedTemplate ? "border-cyan-400" : "border-transparent"
                       }`}
                     >
-                      <span className={`block aspect-square w-full ${item.thumb}`} />
+                      {item.src ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.src} alt="" className="aspect-square w-full object-cover" />
+                      ) : (
+                        <span className={`block aspect-square w-full ${item.thumb}`} />
+                      )}
                       <span className="block truncate bg-neutral-950 px-1 py-1 text-center text-[10px] font-bold text-white">
                         {item.name}
                       </span>
@@ -574,7 +618,18 @@ export function AdminRedes() {
       </section>
 
       <section>
-        <h2 className="text-lg font-bold text-neutral-950">Cola de publicaciones</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-neutral-950">Cola de publicaciones</h2>
+          {posts.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => void discardAll()}
+              className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+            >
+              Cancelar todo
+            </button>
+          ) : null}
+        </div>
         {posts.length === 0 ? (
           <p className="mt-3 rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">
             Todavía no hay borradores.
@@ -593,14 +648,25 @@ export function AdminRedes() {
                   <p className="mt-1 truncate text-xs text-gray-500">{post.product.title}</p>
                   {post.publishError ? <p className="mt-1 text-xs text-rose-600">{post.publishError}</p> : null}
                 </div>
-                <button
-                  type="button"
-                  disabled={busy === post.id || post.status === "published"}
-                  onClick={() => void publish(post.id)}
-                  className="rounded-full bg-neutral-950 px-4 py-2 text-xs font-bold text-white hover:bg-neutral-800 disabled:opacity-50"
-                >
-                  {post.status === "published" ? "Publicado" : busy === post.id ? "Subiendo..." : "Subir a Instagram"}
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={busy === post.id || post.status === "published"}
+                    onClick={() => void publish(post.id)}
+                    className="rounded-full bg-neutral-950 px-4 py-2 text-xs font-bold text-white hover:bg-neutral-800 disabled:opacity-50"
+                  >
+                    {post.status === "published" ? "Publicado" : busy === post.id ? "Subiendo..." : "Subir a Instagram"}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Cancelar este post"
+                    disabled={busy === post.id}
+                    onClick={() => void discard(post.id)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-lg leading-none text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                  >
+                    ×
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
