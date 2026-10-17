@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { isSharedProductImage } from "@/lib/store-product-images/public-url";
 import { matchStoreCategory } from "@/lib/store-product-details";
+import { compressImageForAi } from "@/lib/store-recognize-product/compress-client";
 
 export type ProductAiFillResult = {
   title: string;
@@ -19,15 +20,6 @@ type ProductAiFillButtonProps = {
   onResult: (result: ProductAiFillResult) => void;
 };
 
-function fileToDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("No se pudo leer la foto."));
-    reader.readAsDataURL(file);
-  });
-}
-
 export function ProductAiFillButton({ image, pendingFile, categories, onResult }: ProductAiFillButtonProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -38,11 +30,7 @@ export function ProductAiFillButton({ image, pendingFile, categories, onResult }
     setBusy(true);
     setError("");
     try {
-      const payload = pendingFile
-        ? { imageBase64: await fileToDataUrl(pendingFile), mimeType: pendingFile.type }
-        : image.startsWith("data:image/")
-          ? { imageBase64: image }
-          : { imageUrl: image.trim() };
+      const payload = await compressImageForAi(pendingFile || image);
       const response = await fetch("/api/recognize-product", {
         method: "POST",
         credentials: "include",
@@ -68,8 +56,8 @@ export function ProductAiFillButton({ image, pendingFile, categories, onResult }
         subcategoryId: matched?.subcategoryId,
         details: (body.detalles ?? "").trim(),
       });
-    } catch {
-      setError("No se pudo completar con IA.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "No se pudo completar con IA.");
     } finally {
       setBusy(false);
     }

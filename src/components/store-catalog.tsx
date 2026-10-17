@@ -1133,8 +1133,8 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
           stock={stock[editing.id] ?? editing.stock}
           offer={offerOf(editing.id)}
           onClose={() => setEditingId(null)}
-          onSave={(patch) => {
-            updateProduct(editing.id, patch);
+          onSave={async (patch) => {
+            await updateProduct(editing.id, patch);
             setEditingId(null);
           }}
         />
@@ -1174,8 +1174,8 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       {admin && creating ? (
         <NewProductModal
           onClose={() => setCreating(false)}
-          onCreate={(input) => {
-            addProduct(input);
+          onCreate={async (input) => {
+            await addProduct(input);
             setCreating(false);
           }}
         />
@@ -1192,6 +1192,10 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       <SiteHeader
         query={query}
         onQueryChange={setQuery}
+        onSearch={(value) => {
+          const next = value.trim();
+          router.push(next ? `/tienda?q=${encodeURIComponent(next)}` : "/tienda");
+        }}
         session={session}
         onLogout={() => {
           signOut();

@@ -3,7 +3,7 @@ import { serverGeminiKey } from "@/lib/store-redes/gemini-key";
 const PROMPT =
   "Analiza la imagen de este producto tecnológico/accesorio. Devuelve ÚNICAMENTE un objeto JSON válido sin formato markdown con las siguientes claves: 'nombre_sugerido' (título corto y comercial), 'categoria' (ej. Auriculares, Cargadores) y 'detalles' (lista en HTML o texto enriquecido con 4-5 características técnicas principales que deduzcas del empaque o del producto para usar como descripción de venta)";
 
-const MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+const MODELS = ["gemini-1.5-flash", "gemini-flash-latest"];
 const MAX_BYTES = 8 * 1024 * 1024;
 
 export type RecognizedProduct = {
@@ -117,7 +117,11 @@ async function generateWithGemini(key: string, modelName: string, image: { mimeT
             ],
           },
         ],
-        generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 400,
+          responseMimeType: "application/json",
+        },
       }),
     },
   );

@@ -34,7 +34,7 @@ export function ProductEditModal({
   stock: number;
   offer: ProductOffer | null;
   onClose: () => void;
-  onSave: (patch: ProductPatch) => void;
+  onSave: (patch: ProductPatch) => void | Promise<void>;
 }) {
   const { config } = useStoreConfig();
   const [title, setTitle] = useState(product.title);
@@ -47,6 +47,8 @@ export function ProductEditModal({
   const [imageError, setImageError] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<OfferDraft>(draftFrom(offer));
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
   const category = config.categories.find((item) => item.id === categoryId) ?? config.categories[0];
   const numericPrice = Number(price);
   const numericStock = Number(stockValue);
@@ -65,8 +67,8 @@ export function ProductEditModal({
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!canSave) return;
-          onSave({
+          if (!canSave || saving) return;
+          const payload: ProductPatch = {
             title: title.trim() || product.title,
             category: category?.name ?? product.category,
             categoryId: category?.id ?? product.categoryId,
@@ -76,7 +78,14 @@ export function ProductEditModal({
             stock: Math.floor(numericStock),
             offer: offerFrom(draft),
             image: image.trim(),
-          });
+          };
+          setSaving(true);
+          setSaveError("");
+          void Promise.resolve(onSave(payload))
+            .catch((error) => {
+              setSaveError(error instanceof Error ? error.message : String(error));
+            })
+            .finally(() => setSaving(false));
         }}
       >
         <ImagePicker
@@ -98,7 +107,7 @@ export function ProductEditModal({
               setCategoryId(result.categoryId);
               setSubcategoryId(result.subcategoryId ?? "");
             }
-            if (result.details) setDetails(result.details);
+            setDetails(result.details);
           }}
         />
         <label className="block text-sm">
@@ -173,13 +182,14 @@ export function ProductEditModal({
           </label>
         </div>
         <OfferFields price={Number.isFinite(numericPrice) ? numericPrice : 0} draft={draft} onChange={setDraft} />
+        {saveError ? <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">{saveError}</p> : null}
         <div className="flex gap-2">
           <button
             type="submit"
-            disabled={!canSave}
+            disabled={!canSave || saving}
             className="rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
-            Guardar
+            {saving ? "Guardando..." : "Guardar"}
           </button>
           <button
             type="button"
@@ -194,7 +204,13 @@ export function ProductEditModal({
   );
 }
 
-export function NewProductModal({ onClose, onCreate }: { onClose: () => void; onCreate: (input: NewProductInput) => void }) {
+export function NewProductModal({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (input: NewProductInput) => void | Promise<void>;
+}) {
   const { config } = useStoreConfig();
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
@@ -207,6 +223,8 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
   const [imageError, setImageError] = useState("");
   const [details, setDetails] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
   const category = config.categories.find((item) => item.id === categoryId) ?? config.categories[0];
   const numericPrice = Number(price);
   const numericStock = Number(stock);
@@ -227,8 +245,8 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!canSave || !category) return;
-          onCreate({
+          if (!canSave || !category || saving) return;
+          const payload: NewProductInput = {
             title: title.trim(),
             price: Math.round(numericPrice),
             category: category.name,
@@ -239,7 +257,14 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
             stock: Math.floor(numericStock),
             offer: offerFrom(draft),
             details: details.trim(),
-          });
+          };
+          setSaving(true);
+          setSaveError("");
+          void Promise.resolve(onCreate(payload))
+            .catch((error) => {
+              setSaveError(error instanceof Error ? error.message : String(error));
+            })
+            .finally(() => setSaving(false));
         }}
       >
         <CreateFields
@@ -283,17 +308,18 @@ export function NewProductModal({ onClose, onCreate }: { onClose: () => void; on
               setCategoryId(result.categoryId);
               setSubcategoryId(result.subcategoryId ?? "");
             }
-            if (result.details) setDetails(result.details);
+            setDetails(result.details);
           }}
         />
         <OfferFields price={Number.isFinite(numericPrice) ? numericPrice : 0} draft={draft} onChange={setDraft} />
+        {saveError ? <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">{saveError}</p> : null}
         <div className="flex gap-2">
           <button
             type="submit"
-            disabled={!canSave}
+            disabled={!canSave || saving}
             className="rounded-full bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
-            Agregar producto
+            {saving ? "Guardando..." : "Agregar producto"}
           </button>
           <button
             type="button"

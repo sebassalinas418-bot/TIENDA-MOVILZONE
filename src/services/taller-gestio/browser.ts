@@ -105,18 +105,23 @@ export async function pushTallerProduct(input: {
   details?: string;
 }) {
   const token = readTallerToken();
-  if (!token) return null;
   const response = await fetch("/api/taller/product", {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      id: input.id?.startsWith("extra-") ? undefined : input.id,
+    }),
   });
-  if (!response.ok) return null;
-  const body = (await response.json()) as { ok?: boolean; id?: string };
-  return body.ok ? body.id ?? null : null;
+  const body = (await response.json().catch(() => ({}))) as { ok?: boolean; id?: string; error?: string; reason?: string };
+  if (!response.ok || !body.ok) {
+    throw new Error(body.error || body.reason || `No se pudo guardar el producto (${response.status}).`);
+  }
+  return body.id ?? null;
 }
 
 export async function signInTallerAdmin(email: string, password: string): Promise<TallerAdmin | null> {

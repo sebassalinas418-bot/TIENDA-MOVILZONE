@@ -74,8 +74,8 @@ type CatalogContextValue = {
   products: CatalogProduct[];
   offerOf: (productId: string) => ProductOffer | null;
   saveOffer: (productId: string, offer: ProductOffer) => void;
-  updateProduct: (productId: string, patch: ProductPatch) => void;
-  addProduct: (input: NewProductInput) => string;
+  updateProduct: (productId: string, patch: ProductPatch) => Promise<void>;
+  addProduct: (input: NewProductInput) => Promise<string>;
   placements: Record<string, StoreProductPlacement>;
   placeProduct: (productId: string, categoryId: string, subcategoryId?: string) => void;
   clearProductPlacement: (productId: string) => void;
@@ -468,7 +468,7 @@ export function CatalogProvider({
     setOffers((current) => ({ ...current, [productId]: offer }));
   }
 
-  function updateProduct(productId: string, patch: ProductPatch) {
+  async function updateProduct(productId: string, patch: ProductPatch) {
     if (patch.price != null && Number.isFinite(patch.price) && patch.price >= 1) {
       const price = Math.round(patch.price);
       setPrices((current) => ({ ...current, [productId]: price }));
@@ -539,7 +539,7 @@ export function CatalogProvider({
       (remote ?? []).find((item) => item.id === productId)?.image ??
       extras.find((item) => item.id === productId)?.image ??
       current.image;
-    void pushTallerProduct({
+    await pushTallerProduct({
       id: productId,
       title: patch.title?.trim() || current.title,
       price: patch.price ?? current.price,
@@ -550,8 +550,17 @@ export function CatalogProvider({
     });
   }
 
-  function addProduct(input: NewProductInput) {
-    const id = `extra-${Date.now().toString(36)}`;
+  async function addProduct(input: NewProductInput) {
+    const detailsText = input.details?.trim() || "";
+    const remoteId = await pushTallerProduct({
+      title: input.title.trim(),
+      price: Math.round(input.price),
+      stock: input.stock,
+      category: input.category,
+      image: input.image,
+      details: detailsText,
+    });
+    const id = remoteId || `extra-${Date.now().toString(36)}`;
     const described = describeStock(input.stock);
     const product: Product = {
       id,
@@ -567,22 +576,14 @@ export function CatalogProvider({
       inStock: described.inStock,
       onSale: false,
       isNew: false,
-      details: input.details?.trim() || undefined,
+      details: detailsText || undefined,
     };
     setExtras((current) => [...current, product]);
     setOffers((current) => ({ ...current, [id]: input.offer }));
     setProductStock(id, input.stock);
-    if (input.details?.trim()) {
-      setDetails((current) => ({ ...current, [id]: input.details!.trim() }));
+    if (detailsText) {
+      setDetails((current) => ({ ...current, [id]: detailsText }));
     }
-    void pushTallerProduct({
-      title: product.title,
-      price: product.price,
-      stock: product.stock,
-      category: product.category,
-      image: product.image,
-      details: input.details?.trim() || "",
-    });
     return id;
   }
 
