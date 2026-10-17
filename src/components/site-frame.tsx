@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { LoginPrompt } from "@/components/login-prompt";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/store-sections";
+import { useAdminCatalogSearch } from "@/lib/admin-catalog-search";
+import { useAdminAccess } from "@/lib/admin-access";
 import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
+import { storeSearchPath } from "@/lib/store-search-path";
 import { useCart } from "@/lib/cart";
 
 export function PageSkyFade() {
@@ -23,6 +26,8 @@ export function SiteFrame({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<DemoSession | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const { openCart, closeCart } = useCart();
+  const { isAdmin } = useAdminAccess();
+  const adminSearch = useAdminCatalogSearch();
 
   useEffect(() => {
     const sync = () => setSession(readSession());
@@ -31,14 +36,24 @@ export function SiteFrame({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(SESSION_EVENT, sync);
   }, []);
 
+  useEffect(() => {
+    if (adminSearch) setQuery(adminSearch.query);
+  }, [adminSearch, adminSearch?.query]);
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-[#f7f8fa] text-gray-900">
       <SiteHeader
         query={query}
-        onQueryChange={setQuery}
+        onQueryChange={(value) => {
+          setQuery(value);
+          adminSearch?.setQuery(value);
+        }}
         onSearch={(value) => {
-          const next = value.trim();
-          router.push(next ? `/tienda?q=${encodeURIComponent(next)}` : "/tienda");
+          if (adminSearch) {
+            adminSearch.setQuery(value);
+            return;
+          }
+          router.push(storeSearchPath(value, isAdmin));
         }}
         session={session}
         onLogout={() => {

@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { forwardRef, useRef, useState, type ReactNode } from "react";
 import { ProductAiFillButton } from "@/components/product-ai-fill-button";
-import { StoreProductImageField } from "@/components/store-product-image-field";
+import {
+  StoreProductImageField,
+  type StoreProductImageFieldHandle,
+} from "@/components/store-product-image-field";
 import { useStoreConfig } from "@/config/store-config";
 import { brands, formatPrice } from "@/data/products";
-import { isPersistableProductImage, isSharedProductImage } from "@/lib/store-product-images/public-url";
+import { imageUrlForProductSave } from "@/lib/store-product-images/default-url";
+import { isPersistableProductImage } from "@/lib/store-product-images/public-url";
 import { quotePrice, type CatalogProduct, type DiscountKind, type NewProductInput, type ProductOffer, type ProductPatch } from "@/lib/offers";
 
 type OfferDraft = {
@@ -49,6 +53,7 @@ export function ProductEditModal({
   const [draft, setDraft] = useState<OfferDraft>(draftFrom(offer));
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
+  const imageFieldRef = useRef<StoreProductImageFieldHandle>(null);
   const category = config.categories.find((item) => item.id === categoryId) ?? config.categories[0];
   const numericPrice = Number(price);
   const numericStock = Number(stockValue);
@@ -58,7 +63,6 @@ export function ProductEditModal({
     numericPrice >= 1 &&
     Number.isFinite(numericStock) &&
     numericStock >= 0 &&
-    isPersistableProductImage(image.trim()) &&
     (!draft.active || !quote.error);
 
   return (
@@ -68,20 +72,23 @@ export function ProductEditModal({
         onSubmit={(event) => {
           event.preventDefault();
           if (!canSave || saving) return;
-          const payload: ProductPatch = {
-            title: title.trim() || product.title,
-            category: category?.name ?? product.category,
-            categoryId: category?.id ?? product.categoryId,
-            subcategoryId,
-            details: details.trim(),
-            price: Math.round(numericPrice),
-            stock: Math.floor(numericStock),
-            offer: offerFrom(draft),
-            image: image.trim(),
-          };
           setSaving(true);
           setSaveError("");
-          void Promise.resolve(onSave(payload))
+          void (async () => {
+            const uploaded = await imageFieldRef.current?.persistPending();
+            const payload: ProductPatch = {
+              title: title.trim() || product.title,
+              category: category?.name ?? product.category,
+              categoryId: category?.id ?? product.categoryId,
+              subcategoryId,
+              details: details.trim(),
+              price: Math.round(numericPrice),
+              stock: Math.floor(numericStock),
+              offer: offerFrom(draft),
+              image: imageUrlForProductSave(uploaded || image),
+            };
+            await onSave(payload);
+          })()
             .catch((error) => {
               setSaveError(error instanceof Error ? error.message : String(error));
             })
@@ -89,6 +96,7 @@ export function ProductEditModal({
         }}
       >
         <ImagePicker
+          ref={imageFieldRef}
           value={image}
           error={imageError}
           onChange={setImage}
@@ -219,12 +227,13 @@ export function NewProductModal({
   const [brand, setBrand] = useState(brands[0] ?? "Genérico");
   const [stock, setStock] = useState("1");
   const [draft, setDraft] = useState<OfferDraft>({ active: false, kind: "percent", value: "10" });
-  const [image, setImage] = useState(config.categories[0]?.image ?? "/categories/todo.jpg");
+  const [image, setImage] = useState("");
   const [imageError, setImageError] = useState("");
   const [details, setDetails] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
+  const imageFieldRef = useRef<StoreProductImageFieldHandle>(null);
   const category = config.categories.find((item) => item.id === categoryId) ?? config.categories[0];
   const numericPrice = Number(price);
   const numericStock = Number(stock);
@@ -236,7 +245,6 @@ export function NewProductModal({
     Number.isFinite(numericStock) &&
     numericStock >= 0 &&
     Boolean(category) &&
-    isPersistableProductImage(image.trim()) &&
     (!draft.active || !quote.error);
 
   return (
@@ -246,21 +254,24 @@ export function NewProductModal({
         onSubmit={(event) => {
           event.preventDefault();
           if (!canSave || !category || saving) return;
-          const payload: NewProductInput = {
-            title: title.trim(),
-            price: Math.round(numericPrice),
-            category: category.name,
-            categoryId: category.id,
-            subcategoryId,
-            brand,
-            image: image.trim() || category.image,
-            stock: Math.floor(numericStock),
-            offer: offerFrom(draft),
-            details: details.trim(),
-          };
           setSaving(true);
           setSaveError("");
-          void Promise.resolve(onCreate(payload))
+          void (async () => {
+            const uploaded = await imageFieldRef.current?.persistPending();
+            const payload: NewProductInput = {
+              title: title.trim(),
+              price: Math.round(numericPrice),
+              category: category.name,
+              categoryId: category.id,
+              subcategoryId,
+              brand,
+              image: imageUrlForProductSave(uploaded || image),
+              stock: Math.floor(numericStock),
+              offer: offerFrom(draft),
+              details: details.trim(),
+            };
+            await onCreate(payload);
+          })()
             .catch((error) => {
               setSaveError(error instanceof Error ? error.message : String(error));
             })
@@ -280,18 +291,15 @@ export function NewProductModal({
           onStock={setStock}
           onBrand={setBrand}
           onCategory={(id) => {
-            const next = config.categories.find((item) => item.id === id);
             setCategoryId(id);
             setSubcategoryId("");
-            if (next && !isSharedProductImage(image) && !image.startsWith("data:") && !image.startsWith("blob:")) {
-              setImage(next.image);
-            }
           }}
           onSubcategory={setSubcategoryId}
           details={details}
           onDetails={setDetails}
         />
         <ImagePicker
+          ref={imageFieldRef}
           value={image}
           error={imageError}
           onChange={setImage}
@@ -505,23 +513,21 @@ function OfferFields({
   );
 }
 
-function ImagePicker({
-  value,
-  onChange,
-  onError,
-  onPendingFile,
-  productId,
-}: {
-  value: string;
-  error: string;
-  onChange: (value: string) => void;
-  onError: (value: string) => void;
-  onPendingFile?: (file: File | null) => void;
-  autoIsolate?: boolean;
-  productId?: string;
-}) {
+const ImagePicker = forwardRef<
+  StoreProductImageFieldHandle,
+  {
+    value: string;
+    error: string;
+    onChange: (value: string) => void;
+    onError: (value: string) => void;
+    onPendingFile?: (file: File | null) => void;
+    autoIsolate?: boolean;
+    productId?: string;
+  }
+>(function ImagePicker({ value, onChange, onError, onPendingFile, productId }, ref) {
   return (
     <StoreProductImageField
+      ref={ref}
       value={value}
       onChange={onChange}
       onError={onError}
@@ -529,7 +535,7 @@ function ImagePicker({
       productId={productId}
     />
   );
-}
+});
 
 export function SubcategoryImageModal({
   name,

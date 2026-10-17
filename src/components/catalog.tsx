@@ -10,7 +10,9 @@ import { PageSkyFade } from "@/components/site-frame";
 import { SiteFooter } from "@/components/store-sections";
 import type { CatalogProduct } from "@/lib/offers";
 import { useCart } from "@/lib/cart";
+import { useAdminAccess } from "@/lib/admin-access";
 import { readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
+import { storeSearchPath } from "@/lib/store-search-path";
 
 export function Catalog() {
   const router = useRouter();
@@ -18,6 +20,7 @@ export function Catalog() {
   const [session, setSession] = useState<DemoSession | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const { addItem, openCart, closeCart } = useCart();
+  const { isAdmin } = useAdminAccess();
 
   useEffect(() => {
     const sync = () => setSession(readSession());
@@ -44,8 +47,7 @@ export function Catalog() {
   }
 
   function searchStore(value: string) {
-    const term = value.trim();
-    router.push(term ? `/tienda?q=${encodeURIComponent(term)}` : "/tienda");
+    router.push(storeSearchPath(value, isAdmin));
   }
 
   return (

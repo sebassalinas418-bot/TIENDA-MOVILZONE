@@ -17,7 +17,10 @@ import { useCatalog, type CatalogProduct } from "@/lib/offers";
 import { storeVisibleCategory } from "@/lib/store-product-placements";
 import { useCart } from "@/lib/cart";
 import { useOrders } from "@/lib/orders";
+import { useAdminCatalogSearch } from "@/lib/admin-catalog-search";
+import { useAdminAccess } from "@/lib/admin-access";
 import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
+import { storeSearchPath } from "@/lib/store-search-path";
 import {
   collectCategoryFilterIds,
   isTallerOrigin,
@@ -75,7 +78,32 @@ type CatalogCategory = {
 };
 
 function normalize(value: string) {
-  return value.toLocaleLowerCase("es").trim();
+  return value
+    .toLocaleLowerCase("es")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function searchTokens(value: string) {
+  return normalize(value).split(/\s+/).filter(Boolean);
+}
+
+function textMatchesSearch(haystack: string, term: string) {
+  const tokens = searchTokens(term);
+  if (tokens.length === 0) return true;
+  const hay = normalize(haystack);
+  return tokens.every((token) => hay.includes(token));
+}
+
+function productMatchesSearch(
+  product: { title: string; brand: string; category: string; details?: string },
+  term: string,
+) {
+  return textMatchesSearch(
+    [product.title, product.brand, product.category, product.details ?? ""].join(" "),
+    term,
+  );
 }
 
 function readCatalogFilter(
@@ -177,6 +205,9 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   const [loginOpen, setLoginOpen] = useState(false);
   const { addItem, openCart, closeCart } = useCart();
   const { stock } = useOrders();
+  const { isAdmin: sessionIsAdmin } = useAdminAccess();
+  const canManage = admin || sessionIsAdmin;
+  const adminSearch = useAdminCatalogSearch();
 
   const previousVista = useRef<string | null | undefined>(undefined);
   const searchKey = searchParams.toString();
@@ -200,6 +231,15 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   }, []);
 
   useEffect(() => {
+    if (!admin || !adminSearch) return;
+    setQuery(adminSearch.query);
+    if (adminSearch.query.trim()) {
+      setFilter({ kind: "all" });
+      setOnlyOffers(false);
+    }
+  }, [admin, adminSearch?.query]);
+
+  useEffect(() => {
     if (admin) return;
     const syncFromLocation = () => {
       const params = new URLSearchParams(window.location.search);
@@ -207,8 +247,8 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       setFilter(nextFilter);
       const isOffers = params.get("vista") === "ofertas";
       setOnlyOffers(isOffers);
-      const q = params.get("q");
-      if (q !== null) setQuery(q);
+      const nextQ = params.get("q");
+      if (nextQ !== null) setQuery(nextQ);
       else if (!params.toString()) setQuery("");
       if (nextFilter.kind !== "all") {
         setExpanded((current) =>
@@ -245,17 +285,18 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     }
   }, [config.categories, filter]);
 
-  const categoryTerm = normalize(categoryQuery);
+  const searchTerm = query.trim();
+  const categoryTerm = categoryQuery.trim();
   const visibleCategories = config.categories.filter((item) => {
     if (!categoryTerm) return true;
     return (
-      normalize(item.name).includes(categoryTerm) ||
-      item.children.some((child) => normalize(child.name).includes(categoryTerm))
+      textMatchesSearch(item.name, categoryTerm) ||
+      item.children.some((child) => textMatchesSearch(child.name, categoryTerm))
     );
   });
 
   const visibleProducts = useMemo(() => {
-    const term = normalize(query);
+    const term = searchTerm;
     const min = minPrice.trim() === "" ? null : Number(minPrice);
     const max = maxPrice.trim() === "" ? null : Number(maxPrice);
 
@@ -266,7 +307,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
         { categoryId: product.categoryId, subcategoryId: product.subcategoryId },
         placements,
       );
-      const catalogFilter = onlyOffers ? ({ kind: "all" } as const) : filter;
+      const catalogFilter = onlyOffers || term ? ({ kind: "all" } as const) : filter;
       const parent =
         catalogFilter.kind === "all"
           ? null
@@ -289,10 +330,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
         (catalogFilter.kind === "sub" &&
           child &&
           (vis.subcategoryId === child.id || vis.categoryId === child.id));
-      const matchesQuery =
-        !term ||
-        normalize(product.title).includes(term) ||
-        normalize(product.brand).includes(term);
+      const matchesQuery = !term || productMatchesSearch(product, term);
       const matchesMin = min === null || Number.isNaN(min) || product.salePrice >= min;
       const matchesMax = max === null || Number.isNaN(max) || product.salePrice <= max;
       const matchesBrand =
@@ -319,7 +357,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       return [...filtered].sort((a, b) => a.salePrice - b.salePrice);
     }
     return filtered;
-  }, [admin, config.categories, filter, maxPrice, minPrice, onlyOffers, placements, products, query, selectedBrands, showOutOfStock, sortKey, stock]);
+  }, [admin, categoryQuery, config.categories, filter, maxPrice, minPrice, onlyOffers, placements, products, query, searchTerm, selectedBrands, showOutOfStock, sortKey, stock]);
 
   function toggleBrand(brand: string) {
     setSelectedBrands((current) =>
@@ -487,6 +525,27 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
 
   const filters = (
     <div className="space-y-6">
+      <section>
+        <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">Productos</h2>
+        <label className="mt-3 block">
+          <span className="sr-only">Buscar productos</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => {
+              const value = event.target.value;
+              setQuery(value);
+              adminSearch?.setQuery(value);
+              if (value.trim()) {
+                setFilter({ kind: "all" });
+                setOnlyOffers(false);
+              }
+            }}
+            placeholder="Buscar producto..."
+            className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-neutral-950 outline-none placeholder:text-neutral-600 focus:border-sky-500"
+          />
+        </label>
+      </section>
       <section>
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-bold tracking-wide text-neutral-900 uppercase">Categoría</h2>
@@ -857,7 +916,8 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     !onlyOffers &&
     filter.kind === "category" &&
     Boolean(activeCategory && activeCategory.children.length > 0) &&
-    normalize(query) === "";
+    normalize(query) === "" &&
+    normalize(categoryQuery) === "";
   const panelKey = showSubcategoryGrid
     ? `grid-${activeCategory?.id}`
     : filter.kind === "sub"
@@ -1078,6 +1138,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                     setMinPrice("");
                     setMaxPrice("");
                     setQuery("");
+                    adminSearch?.setQuery("");
                     setCategoryQuery("");
                     setShowOutOfStock(false);
                     if (admin) {
@@ -1101,9 +1162,9 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                     <ProductCard
                       product={product}
                       onAddToCart={() => handleAddToCart(product)}
-                      onEdit={admin ? () => setEditingId(product.id) : undefined}
-                      onEditImage={admin ? () => setImageEditId(product.id) : undefined}
-                      onToggleHidden={admin ? () => toggleProductHidden(product.id) : undefined}
+                      onEdit={canManage ? () => setEditingId(product.id) : undefined}
+                      onEditImage={canManage ? () => setImageEditId(product.id) : undefined}
+                      onToggleHidden={canManage ? () => toggleProductHidden(product.id) : undefined}
                       draggable={admin}
                       onDragStart={
                         admin
@@ -1127,7 +1188,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
           </div>
         </div>
       </main>
-      {admin && editing ? (
+      {canManage && editing ? (
         <ProductEditModal
           product={editing}
           stock={stock[editing.id] ?? editing.stock}
@@ -1160,7 +1221,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
           }}
         />
       ) : null}
-      {admin && imageEditing ? (
+      {canManage && imageEditing ? (
         <SubcategoryImageModal
           name={imageEditing.title}
           image={imageEditing.image}
@@ -1192,10 +1253,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       <SiteHeader
         query={query}
         onQueryChange={setQuery}
-        onSearch={(value) => {
-          const next = value.trim();
-          router.push(next ? `/tienda?q=${encodeURIComponent(next)}` : "/tienda");
-        }}
+        onSearch={(value) => router.push(storeSearchPath(value, canManage))}
         session={session}
         onLogout={() => {
           signOut();

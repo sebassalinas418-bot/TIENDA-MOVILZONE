@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { prepareProductImageFile } from "@/lib/admin-image-tools/prepare-product-image";
 import { removeProductImageBackground } from "@/lib/admin-image-tools/remove-product-image-background";
 import { uploadStoreProductImage } from "@/lib/store-product-images/client-upload";
@@ -16,6 +16,10 @@ type StoreProductImageFieldProps = {
 
 type ProcessStage = "idle" | "awaiting" | "compressing" | "processing" | "uploading";
 
+export type StoreProductImageFieldHandle = {
+  persistPending: () => Promise<string | null>;
+};
+
 function cn(...parts: Array<string | false | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
@@ -25,14 +29,11 @@ function cn(...parts: Array<string | false | undefined>) {
  * Misma UX: comprimir → recorte local imgly → Storage.
  * La subida sigue yendo al bucket de la tienda (no cambia Supabase).
  */
-export function StoreProductImageField({
-  value,
-  onChange,
-  onError,
-  onPendingFile,
-  productId,
-  disabled = false,
-}: StoreProductImageFieldProps) {
+export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, StoreProductImageFieldProps>(
+  function StoreProductImageField(
+    { value, onChange, onError, onPendingFile, productId, disabled = false },
+    ref,
+  ) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(value || null);
@@ -70,9 +71,9 @@ export function StoreProductImageField({
     setProcessHint("¿Querés quitar el fondo de esta foto?");
   }
 
-  async function commitPending(removeBackground: boolean) {
+  async function commitPending(removeBackground: boolean): Promise<string | null> {
     const file = pendingFile;
-    if (!file) return;
+    if (!file) return null;
     setError(null);
     onError?.("");
     setStage("compressing");
@@ -112,16 +113,29 @@ export function StoreProductImageField({
           ? "Fondo eliminado · imagen lista para guardar."
           : "Foto subida sin recortar el fondo.",
       );
+      return url;
     } catch (uploadError) {
       setPreview(value || null);
       setPendingFile(null);
       onPendingFile?.(null);
       reportError(uploadError instanceof Error ? uploadError.message : "No se pudo subir la imagen.");
+      throw uploadError instanceof Error ? uploadError : new Error("No se pudo subir la imagen.");
     } finally {
       if (previewObjectUrl?.startsWith("blob:")) URL.revokeObjectURL(previewObjectUrl);
       setStage("idle");
     }
   }
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      persistPending: async () => {
+        if (!pendingFile) return null;
+        return commitPending(false);
+      },
+    }),
+    [pendingFile],
+  );
 
   function handleInputChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -334,4 +348,5 @@ export function StoreProductImageField({
       </div>
     </div>
   );
-}
+  },
+);

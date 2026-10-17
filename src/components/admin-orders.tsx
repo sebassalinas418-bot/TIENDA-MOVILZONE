@@ -1,12 +1,14 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { BusinessSettings } from "@/components/admin-business";
 import { AdminCustomers } from "@/components/admin-customers";
 import { AdminRedes } from "@/components/admin-redes";
 import { StoreCatalog } from "@/components/store-catalog";
 import { SiteFrame } from "@/components/site-frame";
+import { AdminCatalogSearchProvider } from "@/lib/admin-catalog-search";
 import { describeStock, formatPrice } from "@/data/products";
 import { useAdminAccess } from "@/lib/admin-access";
 import { useCatalog } from "@/lib/offers";
@@ -52,7 +54,13 @@ const sectionCopy: Record<AdminSection, { title: string; text: string }> = {
 
 export function AdminOrders() {
   const { isAdmin, ready } = useAdminAccess();
+  const searchParams = useSearchParams();
   const [section, setSection] = useState<AdminSection>("tienda");
+  const searchQ = searchParams.get("q")?.trim() ?? "";
+
+  useEffect(() => {
+    if (searchQ) setSection("tienda");
+  }, [searchQ]);
 
   if (!ready) {
     return (
@@ -85,6 +93,7 @@ export function AdminOrders() {
   }
 
   return (
+    <AdminCatalogSearchProvider initialQuery={searchQ}>
     <SiteFrame>
       <header>
         <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
@@ -135,6 +144,7 @@ export function AdminOrders() {
         </div>
       )}
     </SiteFrame>
+    </AdminCatalogSearchProvider>
   );
 }
 
