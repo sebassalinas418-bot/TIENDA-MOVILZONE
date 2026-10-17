@@ -31,7 +31,8 @@ export function StoreProductImageField({
   productId,
   disabled = false,
 }: StoreProductImageFieldProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(value || null);
   const [stage, setStage] = useState<ProcessStage>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -181,21 +182,37 @@ export function StoreProductImageField({
               <circle cx="12" cy="13.5" r="3.2" />
             </svg>
             <p className="mt-2 text-sm text-slate-700">
-              Sacá una foto o{" "}
+              <button
+                type="button"
+                className="font-medium text-slate-800 underline-offset-2 hover:underline"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={disabled || busy}
+              >
+                Sacá una foto
+              </button>
+              {" o "}
               <button
                 type="button"
                 className="font-medium text-sky-700 underline-offset-2 hover:underline"
-                onClick={() => inputRef.current?.click()}
+                onClick={() => galleryInputRef.current?.click()}
                 disabled={disabled || busy}
               >
                 elegí una imagen
               </button>
             </p>
             <input
-              ref={inputRef}
+              ref={cameraInputRef}
               type="file"
               accept="image/*"
               capture="environment"
+              className="hidden"
+              onChange={handleInputChange}
+              disabled={disabled || busy}
+            />
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
               className="hidden"
               onChange={handleInputChange}
               disabled={disabled || busy}
@@ -205,7 +222,7 @@ export function StoreProductImageField({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => inputRef.current?.click()}
+              onClick={() => galleryInputRef.current?.click()}
               disabled={disabled || busy}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
             >
@@ -214,7 +231,15 @@ export function StoreProductImageField({
                 <path d="m6.5 7 3.5-3.5L13.5 7" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M4 12.5V15a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2.5" strokeLinecap="round" />
               </svg>
-              {preview ? "Cambiar imagen" : "Subir imagen"}
+              Elegir de galería
+            </button>
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={disabled || busy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Sacá una foto
             </button>
             {preview ? (
               <button
