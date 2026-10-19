@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatPrice } from "@/data/products";
 import { useCatalog } from "@/lib/offers";
 import { useStoreConfig } from "@/config/store-config";
+import { AdminFreePhotos } from "@/components/admin-free-photos";
 import {
   downloadInstagramProductCard,
   InstagramProductCard,
@@ -102,6 +103,7 @@ export function AdminRedes() {
   const [storedLayouts, setStoredLayouts] = useState<StoredTemplateLayouts | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<TemplateSlotId | null>(null);
   const [showFooter, setShowFooter] = useState(true);
+  const [postSource, setPostSource] = useState<"inventory" | "free">("inventory");
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -146,6 +148,20 @@ export function AdminRedes() {
       setOpenaiOn(Boolean(body.status?.openai) || Boolean(CLIENT_OPENAI_KEY));
       setIgOn(Boolean(body.status?.instagram));
     })();
+  }, []);
+
+  useEffect(() => {
+    function onQueued(event: Event) {
+      const post = (event as CustomEvent<SocialPost>).detail;
+      if (!post?.id) return;
+      setPosts((current) => {
+        const next = [post, ...current.filter((item) => item.id !== post.id)].slice(0, 40);
+        writeLocalPosts(next);
+        return next;
+      });
+    }
+    window.addEventListener("mz-free-photo-queued", onQueued);
+    return () => window.removeEventListener("mz-free-photo-queued", onQueued);
   }, []);
 
   const preview = posts[0];
@@ -511,6 +527,29 @@ export function AdminRedes() {
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_min(100%,34rem)]">
         <div className="rounded-3xl border border-black/5 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold text-neutral-950">Generar post</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setPostSource("inventory")}
+              className={`rounded-full px-4 py-2 text-sm font-bold ${
+                postSource === "inventory" ? "bg-sky-500 text-white" : "bg-slate-100 text-neutral-700"
+              }`}
+            >
+              Desde inventario
+            </button>
+            <button
+              type="button"
+              onClick={() => setPostSource("free")}
+              className={`rounded-full px-4 py-2 text-sm font-bold ${
+                postSource === "free" ? "bg-sky-500 text-white" : "bg-slate-100 text-neutral-700"
+              }`}
+            >
+              Subir fotos libres
+            </button>
+          </div>
+          {postSource === "free" ? <AdminFreePhotos embedded /> : null}
+          {postSource === "inventory" ? (
+          <>
           <label className="mt-4 block text-sm font-medium">
             Motor de IA
             <select
@@ -575,6 +614,8 @@ export function AdminRedes() {
                 {preview.product.title} · {formatPrice(preview.product.price)} · {preview.provider}
               </p>
             </article>
+          ) : null}
+          </>
           ) : null}
         </div>
         {preview ? (
