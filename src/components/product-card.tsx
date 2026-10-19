@@ -7,6 +7,7 @@ import type { CatalogProduct } from "@/lib/offers";
 import { useFavorite } from "@/lib/store-favorites/use-favorite";
 import { isStoreSoldOut, SOLD_OUT_LABEL, soldOutStrikeClass } from "@/lib/store-sold-out/presentation";
 import { storeProductPath } from "@/lib/store-product-path";
+import { StoreOfferSticker } from "@/components/store-offer-sticker";
 
 type ProductCardProps = {
   product: CatalogProduct;
@@ -79,31 +80,29 @@ export function ProductCard({
       </button>
 
       <div className={`relative ${hidden ? "opacity-45" : ""}`}>
-        <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md bg-gray-50 sm:aspect-square sm:rounded-xl">
+        <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md bg-gray-50 sm:aspect-square sm:rounded-xl">
           <img
             src={product.image}
             alt=""
             referrerPolicy="no-referrer"
             className={`h-full w-full object-cover ${hidden ? "grayscale" : ""}`}
           />
+          {hidden ? (
+            <span className="absolute inset-x-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-neutral-900/80 px-2 py-1 text-center text-xs font-bold tracking-wide text-white uppercase">
+              Oculto
+            </span>
+          ) : soldOut ? (
+            <span className="absolute top-2.5 left-2.5 z-10 rounded-lg bg-neutral-800 px-2.5 py-1 text-xs font-black tracking-tight text-white uppercase sm:text-sm">
+              {SOLD_OUT_LABEL}
+            </span>
+          ) : product.pendingHold ? (
+            <span className="absolute inset-x-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-amber-600/90 px-2 py-1 text-center text-[10px] font-bold tracking-wide text-white uppercase sm:text-xs">
+              Producto reservado / pendiente de pago
+            </span>
+          ) : product.onSale && product.badge ? (
+            <StoreOfferSticker label={product.badge} />
+          ) : null}
         </div>
-        {hidden ? (
-          <span className="absolute inset-x-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-neutral-900/80 px-2 py-1 text-center text-xs font-bold tracking-wide text-white uppercase">
-            Oculto
-          </span>
-        ) : soldOut ? (
-          <span className="absolute top-2.5 left-2.5 z-10 rounded-lg bg-neutral-800 px-2.5 py-1 text-xs font-black tracking-tight text-white uppercase sm:text-sm">
-            {SOLD_OUT_LABEL}
-          </span>
-        ) : product.pendingHold ? (
-          <span className="absolute inset-x-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-amber-600/90 px-2 py-1 text-center text-[10px] font-bold tracking-wide text-white uppercase sm:text-xs">
-            Producto reservado / pendiente de pago
-          </span>
-        ) : product.badge ? (
-          <span className="absolute top-2.5 left-2.5 z-10 rounded-lg bg-fuchsia-600 px-2.5 py-1 text-sm font-black tracking-tight text-white shadow-lg shadow-fuchsia-600/35">
-            {product.badge}
-          </span>
-        ) : null}
         {onEditImage ? (
           <button
             type="button"

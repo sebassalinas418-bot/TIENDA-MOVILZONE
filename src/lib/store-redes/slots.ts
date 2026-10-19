@@ -38,10 +38,24 @@ const MASTER: TemplateSlots = {
 };
 
 const URBAN: TemplateSlots = {
-  product: { x: 6, y: 28, w: 58, h: 54 },
-  text: { x: 66, y: 30, w: 32, h: 40 },
+  product: { x: 6, y: 34, w: 58, h: 50 },
+  text: { x: 66, y: 32, w: 32, h: 40 },
   price: { x: 54, y: 72, w: 42, h: 18 },
-  offer: { x: 50, y: 28, w: 16, h: 12 },
+  offer: { x: 50, y: 34, w: 16, h: 12 },
+};
+
+const NEON: TemplateSlots = {
+  product: { x: 5, y: 36, w: 58, h: 48 },
+  text: { x: 65, y: 36, w: 31, h: 38 },
+  price: { x: 52, y: 74, w: 44, h: 16 },
+  offer: { x: 46, y: 36, w: 16, h: 12 },
+};
+
+const LOCAL: TemplateSlots = {
+  product: { x: 40, y: 34, w: 56, h: 50 },
+  text: { x: 2, y: 42, w: 36, h: 36 },
+  price: { x: 50, y: 76, w: 44, h: 13 },
+  offer: { x: 80, y: 36, w: 16, h: 12 },
 };
 
 const DEFAULTS: Record<string, TemplateSlots> = {
@@ -51,6 +65,18 @@ const DEFAULTS: Record<string, TemplateSlots> = {
     text: { ...URBAN.text },
     price: { ...URBAN.price },
     offer: { ...URBAN.offer },
+  },
+  "mz-neon": {
+    product: { ...NEON.product },
+    text: { ...NEON.text },
+    price: { ...NEON.price },
+    offer: { ...NEON.offer },
+  },
+  "mz-local": {
+    product: { ...LOCAL.product },
+    text: { ...LOCAL.text },
+    price: { ...LOCAL.price },
+    offer: { ...LOCAL.offer },
   },
 };
 

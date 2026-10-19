@@ -92,6 +92,10 @@ export async function saveSocialSchedule(shopId: string, patch: Partial<SocialSc
     templateMode: normalizeTemplateMode(patch.templateMode ?? current.schedule.templateMode),
     templateId: patch.templateId ?? current.schedule.templateId,
     lastTemplateIndex: patch.lastTemplateIndex ?? current.schedule.lastTemplateIndex ?? -1,
+    templateSlots: {
+      ...(current.schedule.templateSlots ?? {}),
+      ...(patch.templateSlots ?? {}),
+    },
   };
   const client = socialDb();
   if (!client) return { ok: false as const, error: "Sin conexión para guardar la programación.", schedule };

@@ -11,6 +11,7 @@ import { useOrders } from "@/lib/orders";
 import { ProductCard } from "@/components/product-card";
 import { homeBannerMobile } from "@/lib/store-home-banner/mobile";
 import { storeFeaturedGridClass } from "@/lib/store-product-grid/mobile";
+import { StoreOfferSticker } from "@/components/store-offer-sticker";
 
 const categoryRank: Record<string, number> = {
   cargadores: 0,
@@ -294,9 +295,7 @@ function OfferSpotlight({ product }: { product: CatalogProduct }) {
     >
       <span className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl bg-gray-50 sm:h-36 sm:w-36">
         <img src={product.image} alt="" className="h-full w-full object-cover" />
-        {product.badge ? (
-          <span className="absolute top-2 left-2 rounded-lg bg-fuchsia-600 px-2 py-1 text-xs font-black text-white">{product.badge}</span>
-        ) : null}
+        {product.onSale && product.badge ? <StoreOfferSticker label={product.badge} className="h-10 w-10 text-[10px] sm:h-11 sm:w-11 sm:text-[11px]" /> : null}
       </span>
       <span className="min-w-0 py-1 pr-2">
         <span className="block text-sm font-semibold text-neutral-800">{product.category}</span>

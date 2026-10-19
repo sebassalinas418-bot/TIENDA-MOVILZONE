@@ -15,6 +15,7 @@ import { storeProductGridClass } from "@/lib/store-product-grid/mobile";
 import { isStoreSoldOut, SOLD_OUT_LABEL, soldOutStrikeClass } from "@/lib/store-sold-out/presentation";
 import { overlayCatalogStock } from "@/lib/web-pending-stock/availability";
 import { stripUnsafeProductHtml } from "@/lib/store-product-details";
+import { StoreOfferSticker } from "@/components/store-offer-sticker";
 
 export function ProductDetailScreen() {
   const params = useParams<{ id: string }>();
@@ -173,8 +174,18 @@ export function ProductDetailScreen() {
 
       <div className="grid gap-8 lg:grid-cols-2 lg:gap-12">
         <section>
-          <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-3xl bg-[#f4f1f6] p-6 sm:p-10">
-            <img src={shownImage} alt={product.title} referrerPolicy="no-referrer" className="max-h-full max-w-full object-contain" />
+          <div className="flex aspect-square items-center justify-center overflow-visible rounded-3xl bg-[#f4f1f6] p-6 sm:p-10">
+            <div className="relative w-fit max-w-full">
+              <img
+                src={shownImage}
+                alt={product.title}
+                referrerPolicy="no-referrer"
+                className="block h-auto max-h-[28rem] w-auto max-w-full object-contain sm:max-h-[32rem]"
+              />
+              {product.onSale && product.badge ? (
+                <StoreOfferSticker label={product.badge} className="top-2 right-2 h-20 w-20 text-2xl font-bold" />
+              ) : null}
+            </div>
           </div>
           {gallery.length > 0 ? (
             <ul className="mt-3 flex flex-wrap gap-2">
@@ -208,11 +219,8 @@ export function ProductDetailScreen() {
               {formatPrice(product.salePrice)}
             </p>
             {product.onSale && product.price > product.salePrice ? (
-              <p className="mt-1 text-sm text-neutral-500">
-                <span className="line-through">{formatPrice(product.price)}</span>
-                {product.badge ? (
-                  <span className="ml-2 font-semibold text-emerald-600">{product.badge}</span>
-                ) : null}
+              <p className="mt-1 text-sm font-semibold text-rose-800 line-through decoration-rose-800">
+                {formatPrice(product.price)}
               </p>
             ) : (
               <p className="mt-1 hidden text-sm font-semibold text-neutral-800 sm:block">

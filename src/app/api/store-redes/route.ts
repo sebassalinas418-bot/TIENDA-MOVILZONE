@@ -13,6 +13,8 @@ import {
   storeRedesShopId,
 } from "@/lib/store-redes/server";
 import { normalizeSocialAiEngine } from "@/lib/store-redes/copy-ai";
+import { readDefaultTemplateLayout, saveDefaultTemplateLayout } from "@/lib/store-redes/template-layout-store";
+import type { TemplateSlots } from "@/lib/store-redes/slots";
 import type { SocialAiEngine, SocialProductSnap, SocialSchedule } from "@/lib/store-redes/types";
 
 function denied() {
@@ -31,11 +33,12 @@ export async function GET(request: Request) {
   const shop = shopOrError();
   if ("error" in shop) return shop.error;
   try {
-    const [posts, schedule] = await Promise.all([
+    const [posts, schedule, defaultTemplateLayout] = await Promise.all([
       listSocialPosts(shop.shopId),
       readSocialSchedule(shop.shopId),
+      readDefaultTemplateLayout(shop.shopId),
     ]);
-    return Response.json({ ...posts, ...schedule, status: socialMarketingStatus() });
+    return Response.json({ ...posts, ...schedule, defaultTemplateLayout, status: socialMarketingStatus() });
   } catch (err) {
     return Response.json(
       { ok: false, error: err instanceof Error ? err.message : "No se pudo leer Redes." },
@@ -51,13 +54,14 @@ export async function POST(request: Request) {
   if ("error" in shop) return shop.error;
   try {
     const body = (await request.json()) as {
-      action?: "generate" | "publish" | "schedule" | "tick" | "discard" | "discard-all";
+      action?: "generate" | "publish" | "schedule" | "tick" | "discard" | "discard-all" | "save-template";
       product?: SocialProductSnap;
       products?: SocialProductSnap[];
       random?: boolean;
       engine?: SocialAiEngine;
       templateId?: string;
       id?: string;
+      slots?: TemplateSlots;
       schedule?: Partial<SocialSchedule>;
     };
     if (body.action === "tick") {
@@ -76,6 +80,24 @@ export async function POST(request: Request) {
       if (!body.id) return Response.json({ ok: false, error: "Falta el post." }, { status: 400 });
       const result = await publishSocialPost(shop.shopId, body.id);
       return Response.json(result, { status: result.ok ? 200 : 400 });
+    }
+    if (body.action === "save-template") {
+      if (!body.slots) return Response.json({ ok: false, error: "Faltan las coordenadas de la plantilla." }, { status: 400 });
+      const templateId = body.templateId || "mz-hero";
+      const stored = await saveDefaultTemplateLayout(shop.shopId, body.slots, templateId);
+      const schedule = await saveSocialSchedule(shop.shopId, {
+        templateId,
+        templateSlots: { [templateId]: body.slots },
+      });
+      if (!stored.ok && !schedule.ok) {
+        return Response.json({ ok: false, error: stored.error || schedule.error }, { status: 400 });
+      }
+      return Response.json({
+        ok: true,
+        layout: stored.ok ? stored.layout : null,
+        schedule: schedule.schedule,
+        warning: stored.ok ? undefined : stored.error,
+      });
     }
     if (body.action === "schedule") {
       const result = await saveSocialSchedule(shop.shopId, body.schedule ?? {});

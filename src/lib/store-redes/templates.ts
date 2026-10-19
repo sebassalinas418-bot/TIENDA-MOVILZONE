@@ -1,7 +1,7 @@
 import type { SocialSchedule, SocialTemplateMode } from "@/lib/store-redes/types";
 
 export type TemplateKind = "left" | "right" | "hero" | "stack" | "minimal";
-export type TemplateTone = "impacto" | "hero" | "tech" | "energy" | "clean" | "urban";
+export type TemplateTone = "impacto" | "hero" | "tech" | "energy" | "clean" | "urban" | "neon" | "local";
 
 export type TemplateLayout = {
   kind: TemplateKind;
@@ -68,6 +68,48 @@ export const OFFICIAL_REDES_TEMPLATES: OfficialRedesTemplate[] = [
       kind: "left",
       tone: "urban",
       baked: false,
+      hideStock: true,
+      knockout: true,
+      ratio: "1:1",
+      product: "",
+      panel: "",
+      title: "",
+      headline: "",
+      features: "",
+      price: "",
+    },
+  },
+  {
+    id: "mz-neon",
+    name: "Neon Flow",
+    hint: "Azul petróleo, violeta y naranja eléctrico. Logo arriba, título debajo, sin superponerse.",
+    src: "",
+    thumb: "bg-[linear-gradient(125deg,#0b3a4a_0%,#4c1d95_40%,#c9cdd4_72%,#ff5a1f_100%)]",
+    layout: {
+      kind: "right",
+      tone: "neon",
+      baked: false,
+      hideStock: true,
+      knockout: true,
+      ratio: "1:1",
+      product: "",
+      panel: "",
+      title: "",
+      headline: "",
+      features: "",
+      price: "",
+    },
+  },
+  {
+    id: "mz-local",
+    name: "Local",
+    hint: "Foto del local MZ. Título debajo del logo, producto sobre la pincelada.",
+    src: "/redes/plantilla-mz-local.jpg",
+    thumb: "bg-[url('/redes/plantilla-mz-local.jpg')] bg-cover bg-center",
+    layout: {
+      kind: "stack",
+      tone: "local",
+      baked: true,
       hideStock: true,
       knockout: true,
       ratio: "1:1",

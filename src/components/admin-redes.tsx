@@ -27,6 +27,12 @@ import {
   type TemplateSlots,
 } from "@/lib/store-redes/slots";
 import {
+  parseStoredTemplateLayouts,
+  slotsForTemplate,
+  storedLayoutsFromSlotMap,
+  type StoredTemplateLayouts,
+} from "@/lib/store-redes/template-layout";
+import {
   defaultSocialSchedule,
   type SocialAiEngine,
   type SocialFrequency,
@@ -93,6 +99,7 @@ export function AdminRedes() {
   const [engine, setEngine] = useState<SocialAiEngine>("gemini");
   const [customTemplate, setCustomTemplate] = useState("");
   const [slots, setSlots] = useState<TemplateSlots>(() => defaultTemplateSlots(DEFAULT_TEMPLATE_ID));
+  const [storedLayouts, setStoredLayouts] = useState<StoredTemplateLayouts | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<TemplateSlotId | null>(null);
   const [showFooter, setShowFooter] = useState(true);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -117,6 +124,7 @@ export function AdminRedes() {
       const body = (await response.json()) as {
         posts?: SocialPost[];
         schedule?: SocialSchedule;
+        defaultTemplateLayout?: unknown;
         status?: { ai?: boolean; gemini?: boolean; openai?: boolean; instagram?: boolean };
       };
       if (body.posts?.length) {
@@ -128,6 +136,11 @@ export function AdminRedes() {
         if (next.templateId === CUSTOM_TEMPLATE_ID) next.templateId = DEFAULT_TEMPLATE_ID;
         setSchedule(next);
       }
+      setStoredLayouts(
+        parseStoredTemplateLayouts(body.defaultTemplateLayout) ??
+          storedLayoutsFromSlotMap(body.schedule?.templateSlots) ??
+          null,
+      );
       setAiOn(Boolean(body.status?.ai));
       setGeminiOn(Boolean(body.status?.gemini) || Boolean(CLIENT_GEMINI_KEY));
       setOpenaiOn(Boolean(body.status?.openai) || Boolean(CLIENT_OPENAI_KEY));
@@ -153,8 +166,19 @@ export function AdminRedes() {
   const previewLayout = templateLayout(activeTemplateId);
 
   useEffect(() => {
-    setSlots(defaultTemplateSlots(activeTemplateId));
-  }, [activeTemplateId]);
+    setSlots(
+      slotsForTemplate(activeTemplateId, storedLayouts, {
+        ...readLocalSlots(),
+        ...(schedule.templateSlots ?? {}),
+      }),
+    );
+  }, [activeTemplateId, storedLayouts]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   function persistSlots(nextSlots = slots) {
     const map = { ...readLocalSlots(), [activeTemplateId]: nextSlots };
@@ -175,15 +199,31 @@ export function AdminRedes() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "schedule", schedule: next }),
+        body: JSON.stringify({
+          action: "save-template",
+          templateId: activeTemplateId,
+          slots: next.templateSlots?.[activeTemplateId] ?? slots,
+        }),
       });
-      const body = (await response.json()) as { ok?: boolean; error?: string; schedule?: SocialSchedule };
+      const body = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        warning?: string;
+        schedule?: SocialSchedule;
+        layout?: unknown;
+      };
       if (!body.ok) {
         setError(body.error || "Las posiciones quedaron en este navegador.");
         return;
       }
+      const parsed = parseStoredTemplateLayouts(body.layout);
+      if (parsed) setStoredLayouts(parsed);
       if (body.schedule) setSchedule(body.schedule);
-      setNotice("Plantilla guardada. Las coordenadas se usan al generar la imagen.");
+      setNotice(
+        body.warning
+          ? `Plantilla guardada en programación. ${body.warning}`
+          : "Plantilla maestra guardada. Los próximos productos usan estas coordenadas.",
+      );
     } catch {
       setError("No se pudo guardar en el servidor. Quedó en este navegador.");
     } finally {
@@ -360,6 +400,11 @@ export function AdminRedes() {
 
   return (
     <div className="space-y-8">
+      {notice ? (
+        <div className="fixed right-4 bottom-4 z-50 max-w-sm rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-lg">
+          {notice}
+        </div>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-3xl border border-black/5 bg-white px-4 py-4 shadow-sm">
           <p className="text-[11px] font-bold tracking-wide text-slate-400 uppercase">Catálogo</p>
@@ -557,7 +602,7 @@ export function AdminRedes() {
                   </button>
                 ))}
               </div>
-              <div className="mt-3 grid max-w-md grid-cols-2 gap-2">
+              <div className="mt-3 grid max-w-lg grid-cols-2 gap-2 sm:grid-cols-4">
                 {OFFICIAL_REDES_TEMPLATES.map((item) => {
                   const selectedTemplate = activeTemplateId === item.id;
                   return (
@@ -691,7 +736,7 @@ export function AdminRedes() {
               )}
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {(Object.keys(TEMPLATE_SLOT_LABELS) as TemplateSlotId[])
-                  .filter((id) => id !== "offer" || Boolean(previewSnap?.onSale))
+                  .filter((id) => id !== "offer")
                   .map((id) => (
                   <button
                     key={id}

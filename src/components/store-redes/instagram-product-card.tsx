@@ -87,6 +87,8 @@ export const InstagramProductCard = forwardRef<HTMLDivElement, InstagramProductC
     const tone = zones.tone || toneFromKind(zones.kind);
     const baked = Boolean(zones.baked);
     const urban = tone === "urban";
+    const neon = tone === "neon";
+    const local = tone === "local";
     const light = !background;
     const hidePanel = Boolean(zones.hidePanel);
     const frame =
@@ -120,21 +122,40 @@ export const InstagramProductCard = forwardRef<HTMLDivElement, InstagramProductC
           <Backdrop tone={tone} />
         )}
 
-        {baked ? null : <BrandMark urban={urban} />}
+        {baked || neon ? null : <BrandMark urban={urban} />}
 
-        <div
-          className={`pointer-events-none absolute z-20 ${
-            baked
-              ? "top-[15%] right-[8%] left-[7%] -rotate-[4deg]"
-              : urban
-                ? "top-12 right-8 left-3"
-                : "top-11 right-3 left-3 -rotate-[6deg]"
-          }`}
-        >
-          <h2 style={{ fontFamily: IMPACT, lineHeight: 0.86 }}>
-            <DisplayTitle title={displayTitle} baked={baked} urban={urban} />
-          </h2>
-        </div>
+        {neon ? (
+          <div className="pointer-events-none absolute top-0 right-0 left-0 z-30 px-3.5 pt-2.5">
+            <div className="flex h-12 items-center">
+              <BrandMark neon />
+            </div>
+            <div className="mt-3 max-h-[18%] max-w-[78%] overflow-hidden pr-4">
+              <h2 style={{ fontFamily: IMPACT, lineHeight: 0.86 }}>
+                <DisplayTitle title={displayTitle} neon />
+              </h2>
+            </div>
+          </div>
+        ) : local ? (
+          <div className="pointer-events-none absolute top-[5.5%] right-3 z-20 max-h-[22%] w-[46%] overflow-hidden pl-2 text-right">
+            <h2 style={{ fontFamily: IMPACT, lineHeight: 0.86 }}>
+              <DisplayTitle title={displayTitle} local />
+            </h2>
+          </div>
+        ) : (
+          <div
+            className={`pointer-events-none absolute z-20 ${
+              baked
+                ? "top-[15%] right-[8%] left-[7%] -rotate-[4deg]"
+                : urban
+                  ? "top-[5.5rem] right-8 left-3"
+                  : "top-11 right-3 left-3 -rotate-[6deg]"
+            }`}
+          >
+            <h2 style={{ fontFamily: IMPACT, lineHeight: 0.86 }}>
+              <DisplayTitle title={displayTitle} baked={baked} urban={urban} />
+            </h2>
+          </div>
+        )}
 
         {photo ? (
           <Layer
@@ -143,34 +164,14 @@ export const InstagramProductCard = forwardRef<HTMLDivElement, InstagramProductC
             bounds={bounds}
             editing={editing}
             selected={selectedSlot === "product"}
-            zIndex={selectedSlot === "product" ? 30 : 10}
+            zIndex={selectedSlot === "product" ? 30 : hasOffer ? 28 : 10}
+            clip={!hasOffer}
             onSelect={onSelectSlot}
             onChange={(slot) => patchSlot("product", slot)}
           >
-            <ProductPhoto src={photo} alt={displayTitle} knockout={Boolean(zones.knockout)} />
-          </Layer>
-        ) : null}
-
-        {hasOffer ? (
-          <Layer
-            id="offer"
-            slot={live.offer}
-            bounds={bounds}
-            editing={editing}
-            selected={selectedSlot === "offer"}
-            zIndex={selectedSlot === "offer" ? 33 : 25}
-            onSelect={onSelectSlot}
-            onChange={(slot) => patchSlot("offer", slot)}
-          >
-            <div className="flex h-full w-full items-center justify-center">
-              <span
-                className={`flex h-[92%] w-[92%] -rotate-[22deg] items-center justify-center text-[13px] leading-none font-black text-white shadow-[0_8px_16px_rgba(91,33,182,0.35)] ${
-                  urban ? "bg-fuchsia-600" : "bg-rose-600"
-                }`}
-                style={{ clipPath: "polygon(8% 6%, 96% 0, 100% 78%, 88% 100%, 2% 92%, 0 22%)" }}
-              >
-                {offerBadge}
-              </span>
+            <div className="relative h-full w-full">
+              <ProductPhoto src={photo} alt={displayTitle} knockout={Boolean(zones.knockout)} />
+              {hasOffer ? <RedesOfferMark label={offerBadge} urban={urban} neon={neon} local={local} /> : null}
             </div>
           </Layer>
         ) : null}
@@ -187,7 +188,7 @@ export const InstagramProductCard = forwardRef<HTMLDivElement, InstagramProductC
             onChange={(slot) => patchSlot("text", slot)}
           >
             <div className="flex h-full w-full flex-col justify-center overflow-hidden">
-              <FeatureList items={bullets} baked={baked} urban={urban} />
+              <FeatureList items={bullets} baked={baked} urban={urban} neon={neon} local={local} />
             </div>
           </Layer>
         )}
@@ -208,11 +209,13 @@ export const InstagramProductCard = forwardRef<HTMLDivElement, InstagramProductC
               compareAtLabel={compareAtLabel}
               baked={baked}
               urban={urban}
+              neon={neon}
+              local={local}
             />
           </Layer>
         ) : null}
 
-        {showFooter && !baked ? <FooterBar urban={urban} /> : null}
+        {showFooter && !baked ? <FooterBar urban={urban} neon={neon} /> : null}
       </div>
     );
   },
@@ -236,6 +239,7 @@ function Layer({
   editing,
   selected,
   zIndex,
+  clip = true,
   onSelect,
   onChange,
   children,
@@ -246,6 +250,7 @@ function Layer({
   editing: boolean;
   selected: boolean;
   zIndex: number;
+  clip?: boolean;
   onSelect?: (id: TemplateSlotId) => void;
   onChange?: (slot: TemplateSlot) => void;
   children: ReactNode;
@@ -279,7 +284,7 @@ function Layer({
     <div
       ref={boxRef}
       style={slotBoxStyle(slot, zIndex)}
-      className={editing ? "cursor-move overflow-visible touch-none" : "overflow-hidden"}
+      className={`${editing ? "cursor-move touch-none" : ""} ${clip && !editing ? "overflow-hidden" : "overflow-visible"}`}
       onPointerDown={(event) => start(event, "move")}
     >
       <div className="h-full w-full overflow-visible">{children}</div>
@@ -394,7 +399,41 @@ function ProductPhoto({ src, alt, knockout }: { src: string; alt: string; knocko
   );
 }
 
+function RedesOfferMark({ label, urban, neon, local }: { label: string; urban?: boolean; neon?: boolean; local?: boolean }) {
+  const fill = local ? "#06b6d4" : neon ? "#ff5a1f" : urban ? "#7c3aed" : "#e11d48";
+  return (
+    <span className="pointer-events-none absolute top-0 right-0 z-30 h-[7.4rem] w-[10.4rem] -rotate-[16deg]">
+      <svg viewBox="0 0 168 96" className="absolute inset-0 h-full w-full overflow-visible drop-shadow-[0_8px_14px_rgba(15,23,42,0.38)]" aria-hidden>
+        <path
+          fill={fill}
+          d="M14 58c10-24 42-40 86-38 34 2 58 16 66 30 7 14-10 24-32 28-34 6-68 0-96 10-20 6-42-6-24-30z"
+        />
+      </svg>
+      <span
+        className="absolute inset-x-[8%] inset-y-[20%] flex items-center justify-center text-[28px] leading-none font-black tracking-tight text-white italic"
+        style={{ fontFamily: IMPACT, textShadow: "0 2px 0 rgba(0,0,0,0.32)" }}
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
+
 function Backdrop({ tone }: { tone: TemplateTone }) {
+  if (tone === "neon") {
+    return (
+      <div className="absolute inset-0 z-0 overflow-hidden bg-[#9aa6b2]">
+        <div className="absolute inset-0 bg-[linear-gradient(118deg,#0b3a4a_0%,#163d55_22%,#4c1d95_48%,#c9cdd4_76%,#e8eaee_100%)]" />
+        <div className="absolute top-[24%] -left-24 h-[70%] w-[80%] -rotate-[18deg] bg-[#0b3a4a]" />
+        <div className="absolute top-[30%] -right-16 h-[50%] w-[58%] rotate-[22deg] bg-[#3b0764]/75" />
+        <div className="absolute right-[-10%] bottom-[-14%] h-[52%] w-[74%] -rotate-[10deg] bg-[#d7dbe2]" />
+        <div className="absolute top-[32%] right-[2.5%] h-[44%] w-[34%] rounded-2xl bg-white/90 shadow-[0_12px_28px_rgba(4,21,37,0.12)]" />
+        <div className="absolute top-[38%] left-[10%] h-44 w-44 rounded-full bg-[#67e8f9]/28 blur-2xl" />
+        <div className="absolute right-[12%] bottom-[16%] h-40 w-40 rounded-full bg-[#ff5a1f]/32 blur-2xl" />
+        <div className="absolute right-[-8%] bottom-[28%] h-1.5 w-[42%] rotate-[14deg] bg-[#67e8f9]" />
+      </div>
+    );
+  }
   if (tone === "urban") {
     return (
       <div className="absolute inset-0 z-0 overflow-hidden bg-[#f7f4ff]">
@@ -446,7 +485,15 @@ function CyanBlob({ className }: { className?: string }) {
   );
 }
 
-function BrandMark({ urban }: { urban?: boolean }) {
+function BrandMark({ urban, neon }: { urban?: boolean; neon?: boolean }) {
+  if (neon) {
+    return (
+      <div className="relative z-30 w-fit max-w-[200px] rounded-lg bg-white px-2.5 py-1.5 shadow-[0_8px_20px_rgba(4,21,37,0.16)] ring-1 ring-[#0b3a4a]/10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/logo-lockup.png" alt="MZ Movil Zone" className="h-8 w-auto max-w-[168px] object-contain object-left" />
+      </div>
+    );
+  }
   return (
     <div className={`absolute top-3 left-3 z-30 rounded-md px-2.5 py-1.5 shadow-lg ${urban ? "bg-[#1e1b4b]" : "bg-[#07111f]"}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -460,12 +507,44 @@ function PriceBadge({
   compareAtLabel,
   baked,
   urban,
+  neon,
+  local,
 }: {
   priceLabel: string;
   compareAtLabel?: string;
   baked?: boolean;
   urban?: boolean;
+  neon?: boolean;
+  local?: boolean;
 }) {
+  if (local) {
+    return (
+      <div className="relative flex h-full w-full items-center justify-center">
+        <div className="absolute inset-x-0 inset-y-1 -rotate-[6deg] rounded-[1.1rem] bg-[#041525]/90 shadow-[0_10px_22px_rgba(4,21,37,0.45)]" />
+        <div className="absolute inset-x-1 inset-y-2 -rotate-[6deg] rounded-[0.9rem] bg-gradient-to-r from-[#0369a1] via-[#06b6d4] to-[#67e8f9]" />
+        <div className="relative flex -rotate-[6deg] flex-col items-center px-2 text-center">
+          {compareAtLabel ? <span className="text-[11px] font-bold text-cyan-100 line-through">{compareAtLabel}</span> : null}
+          <span className="text-[34px] leading-none font-black tracking-tight text-white" style={{ fontFamily: IMPACT }}>
+            {priceLabel}
+          </span>
+        </div>
+      </div>
+    );
+  }
+  if (neon) {
+    return (
+      <div className="relative flex h-full w-full items-center justify-center">
+        <div className="absolute inset-x-0 inset-y-1 -rotate-[3deg] rounded-[1.15rem] bg-[#041525] shadow-[0_12px_24px_rgba(4,21,37,0.38)]" />
+        <div className="absolute inset-x-1 inset-y-2 -rotate-[3deg] rounded-[0.95rem] bg-gradient-to-r from-[#ff5a1f] via-[#ea580c] to-[#5b21b6]" />
+        <div className="relative flex -rotate-[3deg] flex-col items-center px-2 text-center">
+          {compareAtLabel ? <span className="text-[11px] font-bold text-orange-100 line-through">{compareAtLabel}</span> : null}
+          <span className="text-[36px] leading-none font-black tracking-tight text-white" style={{ fontFamily: IMPACT }}>
+            {priceLabel}
+          </span>
+        </div>
+      </div>
+    );
+  }
   if (urban) {
     return (
       <div className="relative flex h-full w-full items-center justify-center">
@@ -502,7 +581,15 @@ function PriceBadge({
   );
 }
 
-function FooterBar({ urban }: { urban?: boolean }) {
+function FooterBar({ urban, neon }: { urban?: boolean; neon?: boolean }) {
+  if (neon) {
+    return (
+      <div className="absolute inset-x-0 bottom-0 z-30 flex h-10 items-center justify-between bg-[#041525] px-3.5 text-[9px] font-black tracking-wide text-white">
+        <span>MZ MOVIL ZONE · Calle 9 N° 421</span>
+        <span className="text-[#67e8f9]">WhatsApp 2302 57 3969</span>
+      </div>
+    );
+  }
   if (urban) {
     return (
       <div className="absolute inset-x-0 bottom-0 z-30 flex h-11 items-center justify-between bg-[#1e1b4b] px-4 text-[10px] font-black tracking-wide text-white">
@@ -532,8 +619,63 @@ function FooterBar({ urban }: { urban?: boolean }) {
   );
 }
 
-function DisplayTitle({ title, baked, urban }: { title: string; baked?: boolean; urban?: boolean }) {
+function DisplayTitle({
+  title,
+  baked,
+  urban,
+  neon,
+  local,
+}: {
+  title: string;
+  baked?: boolean;
+  urban?: boolean;
+  neon?: boolean;
+  local?: boolean;
+}) {
   const { main, rest } = splitAdTitle(title);
+  if (local) {
+    const chars = `${main} ${rest}`.trim().length;
+    const size = chars > 26 ? 28 : chars > 18 ? 34 : chars > 12 ? 38 : 42;
+    const glow = "0 0 10px rgba(103,232,249,0.55), 0 2px 0 rgba(4,21,37,0.85)";
+    return (
+      <span className="ml-auto block max-w-full uppercase italic text-right">
+        <span className="block break-words font-black tracking-tighter text-white" style={{ fontSize: size, lineHeight: 0.84, textShadow: glow }}>
+          {main}
+        </span>
+        {rest ? (
+          <span
+            className="mt-0.5 block break-words font-black tracking-tighter text-[#67e8f9]"
+            style={{ fontSize: Math.max(24, size - 4), lineHeight: 0.86, textShadow: glow }}
+          >
+            {rest}
+          </span>
+        ) : null}
+      </span>
+    );
+  }
+  if (neon) {
+    const chars = `${main} ${rest}`.trim().length;
+    const size = chars > 26 ? 36 : chars > 18 ? 44 : chars > 12 ? 50 : 54;
+    const glow = "0 0 12px rgba(103,232,249,0.7), 0 0 2px rgba(255,90,31,0.45), 0 2px 0 rgba(255,255,255,0.85)";
+    return (
+      <span className="block max-w-full uppercase italic">
+        <span
+          className="block break-words font-black tracking-tighter text-black"
+          style={{ fontSize: size, lineHeight: 0.84, textShadow: glow }}
+        >
+          {main}
+        </span>
+        {rest ? (
+          <span
+            className="mt-0.5 block break-words font-black tracking-tighter text-[#ff5a1f]"
+            style={{ fontSize: Math.max(30, size - 4), lineHeight: 0.86, textShadow: glow }}
+          >
+            {rest}
+          </span>
+        ) : null}
+      </span>
+    );
+  }
   const size = main.length > 18 ? 34 : baked ? 42 : 48;
   if (urban) {
     return (
@@ -588,7 +730,65 @@ function DisplayTitle({ title, baked, urban }: { title: string; baked?: boolean;
   );
 }
 
-function FeatureList({ items, baked, urban }: { items: string[]; baked?: boolean; urban?: boolean }) {
+function FeatureList({
+  items,
+  baked,
+  urban,
+  neon,
+  local,
+}: {
+  items: string[];
+  baked?: boolean;
+  urban?: boolean;
+  neon?: boolean;
+  local?: boolean;
+}) {
+  if (local) {
+    return (
+      <ul className="flex h-full flex-col justify-center gap-3">
+        {items.slice(0, 3).map((item) => {
+          const lines = featureLines(item);
+          return (
+            <li key={item} className="flex items-center gap-2.5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#041525] text-[#67e8f9] ring-1 ring-cyan-300/80">
+                <FeatureGlyph label={item} />
+              </span>
+              <span className="min-w-0 text-[11px] leading-[1.05] font-black tracking-wide text-white uppercase" style={{ textShadow: "0 1px 3px rgba(4,21,37,0.9)" }}>
+                {lines.map((line) => (
+                  <span key={line} className="block truncate">
+                    {line}
+                  </span>
+                ))}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+  if (neon) {
+    return (
+      <ul className="flex h-full flex-col justify-center gap-2">
+        {items.slice(0, 4).map((item) => {
+          const lines = featureLines(item);
+          return (
+            <li key={item} className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 shadow-sm ring-1 ring-[#0b3a4a]/10">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#0b3a4a] text-[#67e8f9]">
+                <FeatureGlyph label={item} />
+              </span>
+              <span className="min-w-0 text-[10px] leading-[1.05] font-black tracking-wide text-[#041525] uppercase">
+                {lines.map((line) => (
+                  <span key={line} className="block truncate">
+                    {line}
+                  </span>
+                ))}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
   if (baked) {
     const rows = [...items.slice(0, 4), "", "", "", ""].slice(0, 4);
     return (
