@@ -8,7 +8,7 @@ import {
   downloadInstagramProductCard,
   InstagramProductCard,
 } from "@/components/store-redes/instagram-product-card";
-import { featuresFromPost } from "@/lib/store-redes/features";
+import { catalogOfferBadge, featuresFromPost } from "@/lib/store-redes/features";
 import { preferRealProductImage } from "@/lib/store-redes/product-image";
 import { normalizeScheduleHours, scheduleHours } from "@/lib/store-redes/schedule";
 import {
@@ -18,6 +18,14 @@ import {
   templateLayout,
   templateSrc,
 } from "@/lib/store-redes/templates";
+import {
+  canvasBounds,
+  commitSlot,
+  defaultTemplateSlots,
+  TEMPLATE_SLOT_LABELS,
+  type TemplateSlotId,
+  type TemplateSlots,
+} from "@/lib/store-redes/slots";
 import {
   defaultSocialSchedule,
   type SocialAiEngine,
@@ -31,6 +39,7 @@ import {
 const LOCAL_POSTS = "movilzone.store-redes.posts";
 const LOCAL_SCHEDULE = "movilzone.store-redes.schedule";
 const LOCAL_TEMPLATE = "movilzone.store-redes.template";
+const LOCAL_SLOTS = "movilzone.store-redes.slots";
 const LOCAL_ENGINE = "movilzone.store-redes.engine";
 const TEMPLATE_MODES: { id: SocialTemplateMode; label: string }[] = [
   { id: "fixed", label: "Fija" },
@@ -58,7 +67,13 @@ export function AdminRedes() {
         category: product.category,
         categoryId: product.categoryId,
         subcategoryId: product.subcategoryId,
-        price: product.salePrice || product.price,
+        price:
+          product.onSale && product.salePrice > 0 && product.salePrice < product.price
+            ? product.salePrice
+            : product.price,
+        listPrice: product.price,
+        onSale: Boolean(product.onSale && product.salePrice > 0 && product.salePrice < product.price),
+        offerBadge: product.onSale ? product.badge : null,
         image: product.image,
         inStock: product.inStock,
       })),
@@ -77,6 +92,9 @@ export function AdminRedes() {
   const [igOn, setIgOn] = useState(false);
   const [engine, setEngine] = useState<SocialAiEngine>("gemini");
   const [customTemplate, setCustomTemplate] = useState("");
+  const [slots, setSlots] = useState<TemplateSlots>(() => defaultTemplateSlots(DEFAULT_TEMPLATE_ID));
+  const [selectedSlot, setSelectedSlot] = useState<TemplateSlotId | null>(null);
+  const [showFooter, setShowFooter] = useState(true);
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -118,6 +136,9 @@ export function AdminRedes() {
   }, []);
 
   const preview = posts[0];
+  const previewSnap = preview
+    ? (pool.find((item) => item.id === preview.product.id) ?? preview.product)
+    : null;
   const selected = pool.find((item) => item.id === selectedId) ?? null;
   const handle = config.instagram || "movilzone.gp";
   const templateMode = schedule.templateMode || "sequential";
@@ -131,15 +152,58 @@ export function AdminRedes() {
   const previewTemplateSrc = templateSrc(activeTemplateId, customTemplate);
   const previewLayout = templateLayout(activeTemplateId);
 
+  useEffect(() => {
+    setSlots(defaultTemplateSlots(activeTemplateId));
+  }, [activeTemplateId]);
+
+  function persistSlots(nextSlots = slots) {
+    const map = { ...readLocalSlots(), [activeTemplateId]: nextSlots };
+    writeLocalSlots(map);
+    const next = { ...schedule, templateSlots: { ...schedule.templateSlots, [activeTemplateId]: nextSlots }, productPool: pool };
+    setSchedule(next);
+    writeLocalSchedule(next);
+    return next;
+  }
+
+  async function saveTemplateSlots() {
+    const next = persistSlots();
+    setBusy("slots");
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/store-redes", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "schedule", schedule: next }),
+      });
+      const body = (await response.json()) as { ok?: boolean; error?: string; schedule?: SocialSchedule };
+      if (!body.ok) {
+        setError(body.error || "Las posiciones quedaron en este navegador.");
+        return;
+      }
+      if (body.schedule) setSchedule(body.schedule);
+      setNotice("Plantilla guardada. Las coordenadas se usan al generar la imagen.");
+    } catch {
+      setError("No se pudo guardar en el servidor. Quedó en este navegador.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function downloadCard() {
     if (!cardRef.current || !preview) return;
+    persistSlots();
+    setSelectedSlot(null);
     setBusy("image");
     setError("");
     setNotice("");
     try {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       const slug = preview.product.title.replace(/[^\w]+/g, "-").slice(0, 40) || "producto";
+      if (!cardRef.current) return;
       await downloadInstagramProductCard(cardRef.current, `instagram-${slug}`);
-      setNotice("Imagen JPG descargada. Listo para subir a Instagram.");
+      setNotice("Imagen JPG descargada con las posiciones actuales.");
     } catch {
       setError("No se pudo armar la imagen. Si la foto es externa, recargá y reintentá.");
     } finally {
@@ -148,6 +212,7 @@ export function AdminRedes() {
   }
 
   async function generate(random: boolean) {
+    persistSlots();
     setBusy(random ? "random" : "one");
     setError("");
     setNotice("");
@@ -492,7 +557,7 @@ export function AdminRedes() {
                   </button>
                 ))}
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+              <div className="mt-3 grid max-w-md grid-cols-2 gap-2">
                 {OFFICIAL_REDES_TEMPLATES.map((item) => {
                   const selectedTemplate = activeTemplateId === item.id;
                   return (
@@ -580,7 +645,7 @@ export function AdminRedes() {
                 </button>
               ) : (
                 <p className="mt-2 text-[11px] text-gray-500">
-                  Fija usa la elegida. Random y secuencial rotan las 5 oficiales. No uses un JPG que ya tenga textos.
+                  Fija usa la elegida. Random y secuencial rotan las plantillas oficiales. El producto se integra al diseño, sin recuadro vacío.
                 </p>
               )}
             </div>
@@ -590,25 +655,113 @@ export function AdminRedes() {
                 templateSrc={previewTemplateSrc}
                 templateId={activeTemplateId}
                 layout={previewLayout}
+                slots={slots}
+                editing={busy !== "image"}
+                selectedSlot={selectedSlot}
+                onSelectSlot={setSelectedSlot}
+                onSlotsChange={setSlots}
                 title={preview.product.title}
                 headline={preview.headline}
-                priceLabel={formatPrice(preview.product.price)}
-                image={preferRealProductImage([
-                  preview.product.image,
-                  pool.find((item) => item.id === preview.product.id)?.image,
-                ])}
+                priceLabel={formatPrice(
+                  previewSnap?.onSale && previewSnap.price > 0
+                    ? previewSnap.price
+                    : preview.product.price || previewSnap?.price || 0,
+                )}
+                compareAtLabel={
+                  previewSnap?.onSale && previewSnap.listPrice && previewSnap.listPrice > previewSnap.price
+                    ? formatPrice(previewSnap.listPrice)
+                    : ""
+                }
+                offerBadge={previewSnap ? catalogOfferBadge(previewSnap) : ""}
+                image={preferRealProductImage([preview.product.image, previewSnap?.image])}
                 features={featuresFromPost(preview)}
+                showFooter={showFooter}
               />
             </div>
-            <button
-              type="button"
-              disabled={busy === "image"}
-              onClick={() => void downloadCard()}
-              className="w-full rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400 disabled:opacity-50"
-            >
-              {busy === "image" ? "Armando imagen..." : "Generar y Descargar Imagen"}
-            </button>
-            <p className="text-center text-[11px] text-gray-500">JPG 1080×1080 listo para Instagram.</p>
+            <div className="rounded-2xl border border-black/10 bg-white p-3">
+              <p className="text-xs font-semibold text-neutral-800">Editor de plantilla</p>
+              <p className="mt-1 text-[11px] text-gray-500">
+                Arrastrá para mover. Los puntos cyan cambian el tamaño. La foto no se deforma.
+              </p>
+              {previewLayout.baked ? null : (
+                <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-neutral-800">
+                  <input type="checkbox" checked={showFooter} onChange={(event) => setShowFooter(event.target.checked)} />
+                  Mostrar dirección y WhatsApp
+                </label>
+              )}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {(Object.keys(TEMPLATE_SLOT_LABELS) as TemplateSlotId[])
+                  .filter((id) => id !== "offer" || Boolean(previewSnap?.onSale))
+                  .map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setSelectedSlot(id)}
+                    className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+                      selectedSlot === id ? "bg-sky-500 text-white" : "bg-slate-100 text-neutral-700"
+                    }`}
+                  >
+                    {TEMPLATE_SLOT_LABELS[id]}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {(["x", "y", "w", "h"] as const).map((key) => (
+                  <label key={key} className="text-[10px] font-bold tracking-wide text-gray-500 uppercase">
+                    {key === "x" ? "X" : key === "y" ? "Y" : key === "w" ? "Ancho" : "Alto"}
+                    <input
+                      type="number"
+                      step="0.5"
+                      min={0}
+                      max={100}
+                      value={selectedSlot ? slots[selectedSlot][key] : 0}
+                      disabled={!selectedSlot}
+                      onChange={(event) => {
+                        if (!selectedSlot) return;
+                        const value = Number(event.target.value);
+                        const slotId = selectedSlot;
+                        setSlots((current) => ({
+                          ...current,
+                          [slotId]: commitSlot(
+                            slotId,
+                            { ...current[slotId], [key]: value },
+                            current,
+                            canvasBounds(previewLayout.ratio),
+                          ),
+                        }));
+                      }}
+                      className="mt-1 w-full rounded-lg border border-black/10 px-2 py-1.5 text-sm font-semibold text-neutral-900"
+                    />
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="mt-2 text-xs font-semibold text-sky-700"
+                onClick={() => setSlots(defaultTemplateSlots(activeTemplateId))}
+              >
+                Restaurar posición original
+              </button>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                disabled={busy === "slots" || busy === "schedule"}
+                onClick={() => void saveTemplateSlots()}
+                className="rounded-full border border-sky-300 bg-white px-4 py-2.5 text-sm font-bold text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+              >
+                {busy === "slots" ? "Guardando..." : "Guardar plantilla"}
+              </button>
+              <button
+                type="button"
+                disabled={busy === "image"}
+                onClick={() => void downloadCard()}
+                className="rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400 disabled:opacity-50"
+              >
+                {busy === "image" ? "Armando imagen..." : "Generar y Descargar Imagen"}
+              </button>
+            </div>
+            <p className="text-center text-[11px] text-gray-500">JPG listo para Instagram, con las posiciones del editor.</p>
           </div>
         ) : (
           <div className="rounded-[2rem] border border-dashed border-gray-200 bg-white px-4 py-16 text-center text-sm text-gray-500">
@@ -702,4 +855,17 @@ function readLocalSchedule(): SocialSchedule {
 
 function writeLocalSchedule(schedule: SocialSchedule) {
   localStorage.setItem(LOCAL_SCHEDULE, JSON.stringify(schedule));
+}
+
+function readLocalSlots(): Record<string, TemplateSlots> {
+  try {
+    const raw = localStorage.getItem(LOCAL_SLOTS);
+    return raw ? (JSON.parse(raw) as Record<string, TemplateSlots>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalSlots(slots: Record<string, TemplateSlots>) {
+  localStorage.setItem(LOCAL_SLOTS, JSON.stringify(slots));
 }

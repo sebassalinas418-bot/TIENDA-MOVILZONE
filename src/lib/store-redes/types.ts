@@ -1,3 +1,5 @@
+import type { TemplateSlots } from "@/lib/store-redes/slots";
+
 export type SocialProductSnap = {
   id: string;
   title: string;
@@ -6,6 +8,9 @@ export type SocialProductSnap = {
   categoryId?: string;
   subcategoryId?: string;
   price: number;
+  listPrice?: number;
+  onSale?: boolean;
+  offerBadge?: string | null;
   image: string;
   inStock?: boolean;
 };
@@ -48,6 +53,7 @@ export type SocialSchedule = {
   templateMode?: SocialTemplateMode;
   templateId?: string;
   lastTemplateIndex?: number;
+  templateSlots?: Record<string, TemplateSlots>;
 };
 
 export const defaultSocialSchedule = (): SocialSchedule => ({
