@@ -438,8 +438,10 @@ export function AdminRedes() {
         </div>
         <div className="rounded-3xl border border-black/5 bg-white px-4 py-4 shadow-sm">
           <p className="text-[11px] font-bold tracking-wide text-slate-400 uppercase">Instagram</p>
-          <p className="mt-1 text-lg font-bold text-neutral-950">{igOn ? "Lista" : "Estructura lista"}</p>
-          <p className="mt-1 text-xs text-gray-500">@{handle}</p>
+          <p className="mt-1 text-lg font-bold text-neutral-950">{igOn ? "Lista" : "Sin conectar"}</p>
+          <p className="mt-1 text-xs text-gray-500">
+            {igOn ? `@${handle}` : "Faltan META_IG_USER_ID y META_PAGE_ACCESS_TOKEN"}
+          </p>
         </div>
       </div>
 
