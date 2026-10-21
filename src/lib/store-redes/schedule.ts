@@ -8,6 +8,21 @@ export function socialScheduleDue(schedule: SocialSchedule, now = new Date()) {
   return Boolean(socialScheduleMatch(schedule, now));
 }
 
+/** Ventana de horario (12 min) sin mirar enabled ni frecuencia. */
+export function matchingScheduleHour(
+  schedule: Pick<SocialSchedule, "hour" | "hours">,
+  now = new Date(),
+) {
+  const { hour, minute } = arClock(now);
+  const nowMins = hour * 60 + minute;
+  for (const slot of scheduleHours(schedule)) {
+    const slotMins = parseClock(slot);
+    if (slotMins == null) continue;
+    if (nowMins >= slotMins && nowMins < slotMins + SLOT_WINDOW_MINUTES) return slot;
+  }
+  return null;
+}
+
 export function socialScheduleMatch(schedule: SocialSchedule, now = new Date()) {
   if (!schedule.enabled) return null;
   const { hour, minute } = arClock(now);

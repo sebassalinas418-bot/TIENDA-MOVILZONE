@@ -40,6 +40,16 @@ export type SocialFrequency = "daily" | "every_2_days" | "weekly";
 
 export type SocialTemplateMode = "fixed" | "random" | "sequential";
 
+/** Campaña de fotos libres: 1 imagen = 1 horario. */
+export type FreeCampaignSlot = {
+  hour: string;
+  imageId: string;
+  imageUrl?: string;
+  caption?: string;
+  headline?: string;
+  postId?: string;
+};
+
 export type SocialSchedule = {
   enabled: boolean;
   frequency: SocialFrequency;
@@ -54,6 +64,11 @@ export type SocialSchedule = {
   templateId?: string;
   lastTemplateIndex?: number;
   templateSlots?: Record<string, TemplateSlots>;
+  freeCampaignSlots?: FreeCampaignSlot[];
+  /** ISO 1=Lunes … 7=Domingo. Solo campaña de fotos libres. */
+  freeCampaignDays?: number[];
+  /** Motor de la cola de fotos libres. No corta el cron de inventario. */
+  freeQueueActive?: boolean;
 };
 
 export const defaultSocialSchedule = (): SocialSchedule => ({
@@ -69,4 +84,6 @@ export const defaultSocialSchedule = (): SocialSchedule => ({
   templateMode: "sequential",
   templateId: "mz-hero",
   lastTemplateIndex: -1,
+  freeCampaignDays: [],
+  freeQueueActive: false,
 });

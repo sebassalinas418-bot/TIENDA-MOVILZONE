@@ -57,16 +57,22 @@ export async function uploadFreePhoto(file: File) {
   return { ok: true as const, url: publicUrl };
 }
 
-export async function enqueueFreePhotoPost(input: { caption: string; imageUrl: string; headline?: string }) {
+export async function enqueueFreePhotoPost(input: {
+  caption: string;
+  imageUrl: string;
+  headline?: string;
+  hour?: string;
+}) {
   const shop = storeRedesShopId();
   if (!shop) return { ok: false as const, error: "Falta TALLER_SHOP_ID." };
   const caption = ensureFreePhotoFooter(input.caption);
   const headline = (input.headline || captionHeadline(caption)).trim() || "Foto libre";
   const { schedule } = await readSocialSchedule(shop);
+  const hour = input.hour?.trim();
   const post: SocialPost = {
     id: randomUUID(),
     createdAt: new Date().toISOString(),
-    scheduledFor: nextScheduledFor(scheduleHours(schedule)),
+    scheduledFor: hour ? nextScheduledFor([hour]) : nextScheduledFor(scheduleHours(schedule)),
     publishedAt: null,
     status: "ready",
     product: {

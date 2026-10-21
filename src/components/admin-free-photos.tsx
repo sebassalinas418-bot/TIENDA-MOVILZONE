@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { captionFromRecognition } from "@/lib/store-free-photos/from-recognition";
 import { compressImageForAi } from "@/lib/store-recognize-product/compress-client";
 import type { SocialPost } from "@/lib/store-redes/types";
 
-type Draft = {
+export const FREE_DRAFT_DONE = "mz-free-draft-done";
+
+export type FreePhotoDraft = {
   id: string;
   file: File;
   preview: string;
@@ -15,17 +17,46 @@ type Draft = {
   error: string;
 };
 
-export function AdminFreePhotos({ embedded = false }: { embedded?: boolean }) {
-  const [drafts, setDrafts] = useState<Draft[]>([]);
+type AdminFreePhotosProps = {
+  embedded?: boolean;
+  onDraftsChange?: (drafts: FreePhotoDraft[]) => void;
+};
+
+export function AdminFreePhotos({ embedded = false, onDraftsChange }: AdminFreePhotosProps) {
+  const [drafts, setDraftsState] = useState<FreePhotoDraft[]>([]);
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState("");
+  const notify = useRef(onDraftsChange);
+  notify.current = onDraftsChange;
+
+  function setDrafts(next: FreePhotoDraft[] | ((current: FreePhotoDraft[]) => FreePhotoDraft[])) {
+    setDraftsState((current) => {
+      const resolved = typeof next === "function" ? next(current) : next;
+      queueMicrotask(() => notify.current?.(resolved));
+      return resolved;
+    });
+  }
+
+  useEffect(() => {
+    function onDone(event: Event) {
+      const id = (event as CustomEvent<string>).detail;
+      if (!id) return;
+      setDrafts((current) => {
+        const item = current.find((draft) => draft.id === id);
+        if (item) URL.revokeObjectURL(item.preview);
+        return current.filter((draft) => draft.id !== id);
+      });
+    }
+    window.addEventListener(FREE_DRAFT_DONE, onDone);
+    return () => window.removeEventListener(FREE_DRAFT_DONE, onDone);
+  }, []);
 
   async function onFiles(list: FileList | null) {
     const files = Array.from(list ?? []).filter((file) => file.type.startsWith("image/"));
     if (!files.length) return;
     setNotice("");
     const next = files.map((file) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}`,
+      id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
       file,
       preview: URL.createObjectURL(file),
       caption: "",
@@ -72,7 +103,7 @@ export function AdminFreePhotos({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
-  async function queueDraft(draft: Draft) {
+  async function queueDraft(draft: FreePhotoDraft) {
     if (!draft.caption.trim()) return;
     setSaving(draft.id);
     setNotice("");
@@ -104,7 +135,9 @@ export function AdminFreePhotos({ embedded = false }: { embedded?: boolean }) {
     <section className={embedded ? "mt-4" : "rounded-3xl border border-black/5 bg-white p-5 shadow-sm"}>
       {embedded ? null : <h2 className="text-lg font-bold text-neutral-950">Subir Fotos Libres</h2>}
       <p className={`${embedded ? "mt-0" : "mt-1"} text-sm text-gray-500`}>
-        Independiente del catálogo. Gemini describe la foto y la mandás a la misma cola de horarios.
+        {embedded
+          ? "Independiente del catálogo. Gemini describe la foto; asigná cada una a un horario abajo. 1 foto = 1 horario."
+          : "Independiente del catálogo. Gemini describe la foto y la mandás a la misma cola de horarios."}
       </p>
       <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-sky-300 bg-sky-50 px-4 py-8 text-center hover:bg-sky-100">
         <span className="rounded-full bg-sky-500 px-4 py-2 text-sm font-bold text-white">Subir fotos</span>
@@ -144,14 +177,18 @@ export function AdminFreePhotos({ embedded = false }: { embedded?: boolean }) {
               </div>
               {draft.error ? <p className="mt-2 text-xs text-rose-600">{draft.error}</p> : null}
               <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={draft.busy || !draft.caption.trim() || saving === draft.id}
-                  onClick={() => void queueDraft(draft)}
-                  className="rounded-full bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-400 disabled:opacity-50"
-                >
-                  {saving === draft.id ? "Guardando..." : "Guardar / Programar"}
-                </button>
+                {embedded ? (
+                  <p className="text-xs font-semibold text-sky-800">Asigná esta foto a un horario en Programación.</p>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={draft.busy || !draft.caption.trim() || saving === draft.id}
+                    onClick={() => void queueDraft(draft)}
+                    className="rounded-full bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-400 disabled:opacity-50"
+                  >
+                    {saving === draft.id ? "Guardando..." : "Guardar / Programar"}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="rounded-full px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"

@@ -5,6 +5,7 @@ import { socialOpenAiKey } from "@/lib/store-redes/gemini-key";
 import { metaInstagramConfigured, publishToInstagram } from "@/lib/store-redes/meta-instagram";
 import { pickSocialProduct } from "@/lib/store-redes/pick-product";
 import { pickImageFromRow, preferRealProductImage } from "@/lib/store-redes/product-image";
+import { freeCampaignDueSlot, normalizeFreeCampaignDays, syncFreeCampaignSlots } from "@/lib/store-free-photos/campaign";
 import { clampHour, normalizeScheduleHours, socialScheduleMatch } from "@/lib/store-redes/schedule";
 import { normalizeTemplateMode, pickNextTemplate } from "@/lib/store-redes/templates";
 import {
@@ -74,6 +75,9 @@ export async function readSocialSchedule(shopId: string) {
       templateMode: normalizeTemplateMode(payload.templateMode),
       templateId: payload.templateId || defaultSocialSchedule().templateId,
       lastTemplateIndex: Number.isFinite(payload.lastTemplateIndex) ? payload.lastTemplateIndex : -1,
+      freeCampaignSlots: syncFreeCampaignSlots(hours, payload.freeCampaignSlots),
+      freeCampaignDays: normalizeFreeCampaignDays(payload.freeCampaignDays),
+      freeQueueActive: Boolean(payload.freeQueueActive),
     },
   };
 }
@@ -96,6 +100,15 @@ export async function saveSocialSchedule(shopId: string, patch: Partial<SocialSc
       ...(current.schedule.templateSlots ?? {}),
       ...(patch.templateSlots ?? {}),
     },
+    freeCampaignSlots: syncFreeCampaignSlots(
+      hours,
+      patch.freeCampaignSlots ?? current.schedule.freeCampaignSlots,
+    ),
+    freeCampaignDays: normalizeFreeCampaignDays(
+      patch.freeCampaignDays ?? current.schedule.freeCampaignDays,
+    ),
+    freeQueueActive:
+      patch.freeQueueActive ?? current.schedule.freeQueueActive ?? false,
   };
   const client = socialDb();
   if (!client) return { ok: false as const, error: "Sin conexión para guardar la programación.", schedule };
@@ -190,6 +203,30 @@ export async function publishSocialPost(shopId: string, id: string) {
 
 export async function runDueSocialPosts(shopId: string) {
   const { schedule } = await readSocialSchedule(shopId);
+  const freeSlot = freeCampaignDueSlot(schedule);
+  if (schedule.freeQueueActive) {
+    if (!freeSlot) {
+      return { ok: true as const, ran: false as const, reason: "Cola de fotos libres en pausa o fuera de horario." };
+    }
+    const campaignHit = (schedule.freeCampaignSlots ?? []).find(
+      (item) => item.hour === freeSlot && item.postId,
+    );
+    if (!campaignHit?.postId) {
+      return { ok: true as const, ran: false as const, reason: "Este horario no tiene foto de campaña." };
+    }
+    const published = await publishSocialPost(shopId, campaignHit.postId);
+    const ranAt = new Date().toISOString();
+    await saveSocialSchedule(shopId, {
+      lastRunAt: ranAt,
+      lastRunBySlot: { ...(schedule.lastRunBySlot ?? {}), [freeSlot]: ranAt },
+      freeCampaignSlots: (schedule.freeCampaignSlots ?? []).map((item) =>
+        item.postId === campaignHit.postId && item.hour === freeSlot
+          ? { hour: item.hour, imageId: "" }
+          : item,
+      ),
+    });
+    return { ok: true as const, ran: true as const, post: published.post, publish: published };
+  }
   const slot = socialScheduleMatch(schedule);
   if (!slot) {
     return { ok: true as const, ran: false as const, reason: "Todavía no toca publicar." };

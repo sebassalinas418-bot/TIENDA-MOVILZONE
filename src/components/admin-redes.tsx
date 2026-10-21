@@ -4,7 +4,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatPrice } from "@/data/products";
 import { useCatalog } from "@/lib/offers";
 import { useStoreConfig } from "@/config/store-config";
-import { AdminFreePhotos } from "@/components/admin-free-photos";
+import { AdminFreePhotos, FREE_DRAFT_DONE, type FreePhotoDraft } from "@/components/admin-free-photos";
+import {
+  assignCampaignImage,
+  campaignPayload,
+  campaignSlotsForSchedule,
+  formatQueueUploadAt,
+  FREE_CAMPAIGN_DAYS,
+  isValidHourInput,
+  maskHourInput,
+  normalizeFreeCampaignDays,
+  syncFreeCampaignSlots,
+  toggleFreeCampaignDay,
+} from "@/lib/store-free-photos/campaign";
 import {
   downloadInstagramProductCard,
   InstagramProductCard,
@@ -104,6 +116,8 @@ export function AdminRedes() {
   const [selectedSlot, setSelectedSlot] = useState<TemplateSlotId | null>(null);
   const [showFooter, setShowFooter] = useState(true);
   const [postSource, setPostSource] = useState<"inventory" | "free">("inventory");
+  const [freeDrafts, setFreeDrafts] = useState<FreePhotoDraft[]>([]);
+  const [freeHourDrafts, setFreeHourDrafts] = useState<string[]>(["11:00"]);
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -180,6 +194,9 @@ export function AdminRedes() {
   })();
   const previewTemplateSrc = templateSrc(activeTemplateId, customTemplate);
   const previewLayout = templateLayout(activeTemplateId);
+  const campaignSlots = campaignSlotsForSchedule(schedule);
+  const displayHours = postSource === "free" ? freeHourDrafts : scheduleHours(schedule);
+  const hoursKey = (schedule.hours ?? []).join("|");
 
   useEffect(() => {
     setSlots(
@@ -195,6 +212,42 @@ export function AdminRedes() {
     const timer = window.setTimeout(() => setNotice(""), 4000);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    setFreeHourDrafts(scheduleHours(schedule));
+  }, [hoursKey, postSource]);
+
+  useEffect(() => {
+    if (postSource !== "free") return;
+    if (!schedule.freeQueueActive) return;
+    let cancelled = false;
+    async function tickQueue() {
+      if (cancelled) return;
+      try {
+        const response = await fetch("/api/store-redes", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "tick" }),
+        });
+        const body = (await response.json()) as { post?: SocialPost; ran?: boolean };
+        if (!body.post?.id) return;
+        setPosts((current) => {
+          const next = current.map((item) => (item.id === body.post?.id ? body.post : item));
+          writeLocalPosts(next);
+          return next;
+        });
+      } catch {
+        /* la cola reintenta en el próximo intervalo */
+      }
+    }
+    void tickQueue();
+    const timer = window.setInterval(() => void tickQueue(), 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [postSource, schedule.freeQueueActive]);
 
   function persistSlots(nextSlots = slots) {
     const map = { ...readLocalSlots(), [activeTemplateId]: nextSlots };
@@ -320,17 +373,111 @@ export function AdminRedes() {
     }
   }
 
-  async function saveSchedule(next: SocialSchedule) {
-    setSchedule(next);
-    writeLocalSchedule(next);
+  function campaignPhotoChoices(index: number) {
+    const currentId = campaignSlots[index]?.imageId ?? "";
+    const taken = new Set(campaignSlots.map((slot, slotIndex) => (slotIndex === index ? "" : slot.imageId)).filter(Boolean));
+    const drafts = freeDrafts.filter(
+      (draft) => !draft.busy && draft.caption.trim() && (draft.id === currentId || !taken.has(draft.id)),
+    );
+    const queued = posts.filter(
+      (post) =>
+        post.product.category === "foto-libre" &&
+        post.status !== "published" &&
+        (post.id === currentId || !taken.has(post.id)),
+    );
+    return { drafts, queued };
+  }
+
+  async function enqueueAssignedFreePhotos(next: SocialSchedule): Promise<SocialSchedule> {
+    const hours = scheduleHours(next);
+    const slots = syncFreeCampaignSlots(hours, next.freeCampaignSlots);
+    const committed = [];
+    for (const slot of slots) {
+      if (!slot.imageId) {
+        committed.push(slot);
+        continue;
+      }
+      if (slot.postId) {
+        committed.push(slot);
+        continue;
+      }
+      const queued = posts.find((post) => post.id === slot.imageId && post.product.category === "foto-libre");
+      if (queued) {
+        committed.push({
+          ...slot,
+          postId: queued.id,
+          imageUrl: queued.product.image,
+          caption: queued.caption,
+          headline: queued.headline,
+        });
+        continue;
+      }
+      const draft = freeDrafts.find((item) => item.id === slot.imageId);
+      if (!draft || !draft.caption.trim()) {
+        committed.push(slot);
+        continue;
+      }
+      const form = new FormData();
+      form.append("image", draft.file);
+      form.append("caption", draft.caption);
+      form.append("headline", draft.headline);
+      form.append("hour", slot.hour);
+      const response = await fetch("/api/store-free-photos", { method: "POST", credentials: "include", body: form });
+      const body = (await response.json()) as { ok?: boolean; error?: string; post?: SocialPost };
+      if (!body.ok || !body.post) {
+        throw new Error(body.error || "No se pudo encolar la foto de ese horario.");
+      }
+      window.dispatchEvent(new CustomEvent("mz-free-photo-queued", { detail: body.post }));
+      URL.revokeObjectURL(draft.preview);
+      window.dispatchEvent(new CustomEvent(FREE_DRAFT_DONE, { detail: draft.id }));
+      setFreeDrafts((current) => current.filter((item) => item.id !== draft.id));
+      committed.push({
+        hour: slot.hour,
+        imageId: body.post.id,
+        postId: body.post.id,
+        imageUrl: body.post.product.image,
+        caption: body.post.caption,
+        headline: body.post.headline,
+      });
+    }
+    return { ...next, hours, freeCampaignSlots: committed };
+  }
+
+  function patchFreeSchedule(next: SocialSchedule) {
+    const payload: SocialSchedule = {
+      ...next,
+      productPool: pool,
+      freeCampaignSlots: syncFreeCampaignSlots(scheduleHours(next), next.freeCampaignSlots),
+      freeCampaignDays: normalizeFreeCampaignDays(next.freeCampaignDays),
+    };
+    setSchedule(payload);
+    writeLocalSchedule(payload);
+  }
+
+  async function saveSchedule(next: SocialSchedule, options?: { confirmFree?: boolean }) {
+    let payload: SocialSchedule = {
+      ...next,
+      productPool: pool,
+      freeCampaignSlots: syncFreeCampaignSlots(scheduleHours(next), next.freeCampaignSlots),
+      freeCampaignDays: normalizeFreeCampaignDays(next.freeCampaignDays),
+    };
     setBusy("schedule");
     setError("");
     try {
+      if (postSource === "free" && options?.confirmFree) {
+        payload = await enqueueAssignedFreePhotos(payload);
+      }
+      setSchedule(payload);
+      writeLocalSchedule(payload);
       const response = await fetch("/api/store-redes", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "schedule", schedule: { ...next, productPool: pool } }),
+        body: JSON.stringify({
+          action: "schedule",
+          schedule: payload,
+          campaign: campaignPayload(payload.freeCampaignSlots ?? []),
+        }),
       });
       const body = (await response.json()) as { ok?: boolean; error?: string; schedule?: SocialSchedule };
       if (!body.ok) {
@@ -338,12 +485,40 @@ export function AdminRedes() {
         return;
       }
       if (body.schedule) setSchedule(body.schedule);
-      setNotice("Programación guardada.");
-    } catch {
-      setError("No se pudo guardar en el servidor. Quedó en este navegador.");
+      setNotice(options?.confirmFree ? "Campaña encolada." : "Programación guardada.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo guardar en el servidor. Quedó en este navegador.");
     } finally {
       setBusy("");
     }
+  }
+
+  async function confirmFreeCampaign() {
+    const hours = freeHourDrafts;
+    if (hours.some((slot) => !isValidHourInput(slot))) {
+      setError("Escribí la hora en HH:MM (00-23 y 00-59).");
+      return;
+    }
+    if (!normalizeFreeCampaignDays(schedule.freeCampaignDays).length) {
+      setError("Elegí al menos un día para la campaña.");
+      return;
+    }
+    if (!campaignSlots.some((slot) => slot.imageId)) {
+      setError("Asigná una foto a un horario.");
+      return;
+    }
+    const slots = campaignSlots.map((slot, index) => ({
+      ...slot,
+      hour: hours[index] || slot.hour,
+    }));
+    await saveSchedule(
+      { ...schedule, hours, freeCampaignSlots: slots, productPool: pool },
+      { confirmFree: true },
+    );
+  }
+
+  async function setFreeQueueActive(active: boolean) {
+    await saveSchedule({ ...schedule, freeQueueActive: active, productPool: pool });
   }
 
   async function discard(id: string) {
@@ -445,87 +620,6 @@ export function AdminRedes() {
         </div>
       </div>
 
-      <section className="rounded-3xl border border-black/5 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-bold text-neutral-950">Programación</h2>
-        <label className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
-          <span className="text-sm font-semibold text-slate-800">Automatizar publicaciones</span>
-          <input
-            type="checkbox"
-            checked={schedule.enabled}
-            onChange={(event) => void saveSchedule({ ...schedule, enabled: event.target.checked, productPool: pool })}
-            className="h-4 w-4 accent-sky-500"
-          />
-        </label>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {FREQ.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => void saveSchedule({ ...schedule, frequency: item.id, productPool: pool })}
-              className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                schedule.frequency === item.id ? "bg-sky-500 text-white" : "bg-neutral-950 text-white hover:bg-neutral-800"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        <div className="mt-4">
-          <p className="text-sm font-medium text-neutral-900">Horarios (Argentina)</p>
-          <p className="mt-1 text-xs text-gray-500">Hasta 5. Ej: 10:00, 14:30 y 20:00.</p>
-          <ul className="mt-3 space-y-2">
-            {scheduleHours(schedule).map((slot, index) => (
-              <li key={`${slot}-${index}`} className="flex items-center gap-2">
-                <input
-                  type="time"
-                  value={slot}
-                  onChange={(event) => {
-                    const next = [...scheduleHours(schedule)];
-                    next[index] = event.target.value || slot;
-                    void saveSchedule({ ...schedule, hours: next, productPool: pool });
-                  }}
-                  className="h-11 w-36 rounded-xl border border-gray-200 px-3 outline-none focus:border-cyan-500"
-                />
-                {scheduleHours(schedule).length > 1 ? (
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-rose-600"
-                    onClick={() => {
-                      const next = scheduleHours(schedule).filter((_, itemIndex) => itemIndex !== index);
-                      void saveSchedule({ ...schedule, hours: normalizeScheduleHours(next), productPool: pool });
-                    }}
-                  >
-                    Quitar
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-          {scheduleHours(schedule).length < 5 ? (
-            <button
-              type="button"
-              className="mt-3 rounded-full bg-neutral-950 px-4 py-2 text-sm font-bold text-white hover:bg-neutral-800"
-              onClick={() => {
-                const current = scheduleHours(schedule);
-                const nextHour = Math.min(23, ((Number.parseInt(current.at(-1)?.slice(0, 2) || "11", 10) + 4) % 24));
-                void saveSchedule({
-                  ...schedule,
-                  hours: normalizeScheduleHours([...current, `${String(nextHour).padStart(2, "0")}:00`]),
-                  productPool: pool,
-                });
-              }}
-            >
-              + Agregar horario
-            </button>
-          ) : (
-            <p className="mt-2 text-xs text-gray-500">Máximo 5 horarios.</p>
-          )}
-          <p className="mt-3 text-xs text-gray-500">
-            Con la automatización activa, cada horario usa el modo de plantillas (fija, random o secuencial).
-          </p>
-        </div>
-      </section>
-
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_min(100%,34rem)]">
         <div className="rounded-3xl border border-black/5 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold text-neutral-950">Generar post</h2>
@@ -549,7 +643,28 @@ export function AdminRedes() {
               Subir fotos libres
             </button>
           </div>
-          {postSource === "free" ? <AdminFreePhotos embedded /> : null}
+          {postSource === "free" ? (
+            <AdminFreePhotos
+              embedded
+              onDraftsChange={(next) => {
+                setFreeDrafts(next);
+                const ids = new Set(next.map((draft) => draft.id));
+                const postIds = new Set(posts.map((post) => post.id));
+                setSchedule((current) => {
+                  const slots = current.freeCampaignSlots ?? [];
+                  let changed = false;
+                  const cleaned = slots.map((slot) => {
+                    if (!slot.imageId || ids.has(slot.imageId) || postIds.has(slot.imageId) || slot.postId) {
+                      return slot;
+                    }
+                    changed = true;
+                    return { hour: slot.hour, imageId: "" };
+                  });
+                  return changed ? { ...current, freeCampaignSlots: cleaned } : current;
+                });
+              }}
+            />
+          ) : null}
           {postSource === "inventory" ? (
           <>
           <label className="mt-4 block text-sm font-medium">
@@ -858,26 +973,308 @@ export function AdminRedes() {
         )}
       </section>
 
+      <section className="rounded-3xl border border-black/5 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-bold text-neutral-950">Programación</h2>
+        {postSource !== "free" ? (
+          <label className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+            <span className="text-sm font-semibold text-slate-800">Automatizar publicaciones</span>
+            <input
+              type="checkbox"
+              checked={schedule.enabled}
+              onChange={(event) => void saveSchedule({ ...schedule, enabled: event.target.checked, productPool: pool })}
+              className="h-4 w-4 accent-sky-500"
+            />
+          </label>
+        ) : null}
+        {postSource !== "free" ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {FREQ.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => void saveSchedule({ ...schedule, frequency: item.id, productPool: pool })}
+                className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                  schedule.frequency === item.id ? "bg-sky-500 text-white" : "bg-neutral-950 text-white hover:bg-neutral-800"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4">
+            <p className="text-sm font-medium text-neutral-900">Días de la campaña</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {FREE_CAMPAIGN_DAYS.map((day) => {
+                const on = (schedule.freeCampaignDays ?? []).includes(day.id);
+                return (
+                  <button
+                    key={day.id}
+                    type="button"
+                    onClick={() =>
+                      patchFreeSchedule({
+                        ...schedule,
+                        freeCampaignDays: toggleFreeCampaignDay(schedule.freeCampaignDays, day.id),
+                      })
+                    }
+                    className={`rounded-full px-3 py-1.5 text-sm font-semibold ${
+                      on ? "bg-sky-500 text-white" : "bg-slate-100 text-neutral-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    {day.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div className="mt-4">
+          <p className="text-sm font-medium text-neutral-900">Horarios (Argentina)</p>
+          <p className="mt-1 text-xs text-gray-500">
+            {postSource === "free"
+              ? "Hasta 5. Escribí HH:MM. Cada horario publica una sola foto."
+              : "Hasta 5. Ej: 10:00, 14:30 y 20:00."}
+          </p>
+          <ul className="mt-3 space-y-3">
+            {displayHours.map((slot, index) => {
+              const campaign = campaignSlots[index];
+              const choices = postSource === "free" ? campaignPhotoChoices(index) : { drafts: [], queued: [] };
+              const selectedDraft = freeDrafts.find((draft) => draft.id === campaign?.imageId);
+              const selectedQueued = posts.find((post) => post.id === campaign?.imageId);
+              const thumb = selectedDraft?.preview || selectedQueued?.product.image || campaign?.imageUrl || "";
+              return (
+                <li
+                  key={`hour-${index}`}
+                  className={`rounded-2xl ${postSource === "free" ? "border border-slate-100 bg-slate-50 p-3" : ""}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    {postSource === "free" ? (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        placeholder="HH:MM"
+                        maxLength={5}
+                        value={slot}
+                        onChange={(event) => {
+                          const next = [...freeHourDrafts];
+                          next[index] = maskHourInput(event.target.value);
+                          setFreeHourDrafts(next);
+                        }}
+                        className="h-11 w-28 rounded-xl border border-gray-200 bg-white px-3 font-mono text-sm outline-none focus:border-cyan-500"
+                      />
+                    ) : (
+                      <input
+                        type="time"
+                        value={slot}
+                        onChange={(event) => {
+                          const next = [...scheduleHours(schedule)];
+                          next[index] = event.target.value || slot;
+                          void saveSchedule({
+                            ...schedule,
+                            hours: next,
+                            productPool: pool,
+                          });
+                        }}
+                        className="h-11 w-36 rounded-xl border border-gray-200 bg-white px-3 outline-none focus:border-cyan-500"
+                      />
+                    )}
+                    {displayHours.length > 1 ? (
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-rose-600"
+                        onClick={() => {
+                          if (postSource === "free") {
+                            const next = freeHourDrafts.filter((_, itemIndex) => itemIndex !== index);
+                            const nextCampaign = campaignSlots.filter((_, itemIndex) => itemIndex !== index);
+                            setFreeHourDrafts(next);
+                            patchFreeSchedule({
+                              ...schedule,
+                              hours: next.filter(isValidHourInput),
+                              freeCampaignSlots: nextCampaign,
+                            });
+                            return;
+                          }
+                          const next = scheduleHours(schedule).filter((_, itemIndex) => itemIndex !== index);
+                          void saveSchedule({
+                            ...schedule,
+                            hours: normalizeScheduleHours(next),
+                            productPool: pool,
+                          });
+                        }}
+                      >
+                        Quitar
+                      </button>
+                    ) : null}
+                  </div>
+                  {postSource === "free" ? (
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start">
+                      {thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={thumb} alt="" className="h-16 w-16 shrink-0 rounded-xl bg-white object-cover" />
+                      ) : (
+                        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-[10px] text-slate-400">
+                          Sin foto
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <label className="block text-xs font-semibold text-neutral-800">
+                          Foto de este horario
+                          <select
+                            value={campaign?.imageId ?? ""}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              const draft = freeDrafts.find((item) => item.id === value);
+                              const queued = posts.find((item) => item.id === value);
+                              const extra = draft
+                                ? {
+                                    caption: draft.caption,
+                                    headline: draft.headline,
+                                    imageUrl: draft.preview,
+                                    postId: undefined,
+                                  }
+                                : queued
+                                  ? {
+                                      postId: queued.id,
+                                      caption: queued.caption,
+                                      headline: queued.headline,
+                                      imageUrl: queued.product.image,
+                                    }
+                                  : {};
+                              patchFreeSchedule({
+                                ...schedule,
+                                freeCampaignSlots: assignCampaignImage(campaignSlots, index, value, extra),
+                              });
+                            }}
+                            className="mt-1 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-sky-500"
+                          >
+                            <option value="">Elegí una foto</option>
+                            {choices.drafts.map((draft) => (
+                              <option key={draft.id} value={draft.id}>
+                                {draft.headline || draft.file.name} (nueva)
+                              </option>
+                            ))}
+                            {choices.queued.map((post) => (
+                              <option key={post.id} value={post.id}>
+                                {post.headline}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {campaign?.caption ? (
+                          <p className="mt-2 line-clamp-2 text-xs text-slate-600">{campaign.caption}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          {displayHours.length < 5 ? (
+            <button
+              type="button"
+              className="mt-3 rounded-full bg-neutral-950 px-4 py-2 text-sm font-bold text-white hover:bg-neutral-800"
+              onClick={() => {
+                if (postSource === "free") {
+                  const last = freeHourDrafts.at(-1) || "11:00";
+                  const nextHour = Math.min(23, (Number.parseInt(last.slice(0, 2) || "11", 10) + 4) % 24);
+                  const next = [...freeHourDrafts, `${String(nextHour).padStart(2, "0")}:00`];
+                  setFreeHourDrafts(next);
+                  patchFreeSchedule({ ...schedule, hours: next.filter(isValidHourInput) });
+                  return;
+                }
+                const current = scheduleHours(schedule);
+                const nextHour = Math.min(23, ((Number.parseInt(current.at(-1)?.slice(0, 2) || "11", 10) + 4) % 24));
+                void saveSchedule({
+                  ...schedule,
+                  hours: normalizeScheduleHours([...current, `${String(nextHour).padStart(2, "0")}:00`]),
+                  productPool: pool,
+                });
+              }}
+            >
+              + Agregar horario
+            </button>
+          ) : (
+            <p className="mt-2 text-xs text-gray-500">Máximo 5 horarios.</p>
+          )}
+          {postSource === "free" ? (
+            <button
+              type="button"
+              disabled={Boolean(busy)}
+              onClick={() => void confirmFreeCampaign()}
+              className="mt-4 rounded-full bg-sky-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-sky-400 disabled:opacity-50"
+            >
+              {busy === "schedule" ? "Confirmando..." : "Confirmar programación"}
+            </button>
+          ) : null}
+          <p className="mt-3 text-xs text-gray-500">
+            {postSource === "free"
+              ? "Confirmá para mandar a la cola el par día + hora + foto + texto. Inventario y Graph no se tocan."
+              : "Con la automatización activa, cada horario usa el modo de plantillas (fija, random o secuencial)."}
+          </p>
+          {error && postSource === "free" ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
+        </div>
+      </section>
+
       <section>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold text-neutral-950">Cola de publicaciones</h2>
-          {posts.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => void discardAll()}
-              className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
-            >
-              Cancelar todo
-            </button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {postSource === "free" ? (
+              <>
+                <button
+                  type="button"
+                  disabled={Boolean(busy) || schedule.freeQueueActive}
+                  onClick={() => void setFreeQueueActive(true)}
+                  className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  ▶ Comenzar
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(busy) || !schedule.freeQueueActive}
+                  onClick={() => void setFreeQueueActive(false)}
+                  className="rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-400 disabled:opacity-50"
+                >
+                  ⏸ Detener
+                </button>
+              </>
+            ) : null}
+            {posts.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => void discardAll()}
+                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+              >
+                Cancelar todo
+              </button>
+            ) : null}
+          </div>
         </div>
+        {postSource === "free" ? (
+          <p className="mt-2 text-xs text-gray-500">
+            {schedule.freeQueueActive
+              ? "Motor activo: publica en el día y hora de la campaña."
+              : "Motor detenido: no dispara a Instagram hasta que pulses Comenzar."}
+          </p>
+        ) : null}
         {posts.length === 0 ? (
           <p className="mt-3 rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">
             Todavía no hay borradores.
           </p>
         ) : (
           <ul className="mt-3 space-y-3">
-            {posts.map((post) => (
+            {posts.map((post) => {
+              const campaign = (schedule.freeCampaignSlots ?? []).find(
+                (slot) => slot.postId === post.id || slot.imageId === post.id,
+              );
+              const uploadAt = formatQueueUploadAt(
+                post.scheduledFor,
+                campaign?.hour,
+                schedule.freeCampaignDays,
+              );
+              return (
               <li
                 key={post.id}
                 className="flex flex-col gap-3 rounded-2xl border border-black/5 bg-white p-4 sm:flex-row sm:items-center"
@@ -887,6 +1284,9 @@ export function AdminRedes() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-neutral-950">{post.headline}</p>
                   <p className="mt-1 truncate text-xs text-gray-500">{post.product.title}</p>
+                  {uploadAt ? (
+                    <p className="mt-1 text-xs font-semibold text-sky-700">{uploadAt}</p>
+                  ) : null}
                   {post.publishError ? <p className="mt-1 text-xs text-rose-600">{post.publishError}</p> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -909,7 +1309,8 @@ export function AdminRedes() {
                   </button>
                 </div>
               </li>
-            ))}
+            );
+            })}
           </ul>
         )}
       </section>
