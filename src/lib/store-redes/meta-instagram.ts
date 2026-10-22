@@ -4,11 +4,15 @@ import type { SocialPost } from "@/lib/store-redes/types";
 
 const META_KEYS = ["META_IG_USER_ID", "META_PAGE_ACCESS_TOKEN", "INSTAGRAM_IG_USER_ID", "INSTAGRAM_ACCESS_TOKEN"] as const;
 
-let hydrated = false;
+function hasMetaEnv() {
+  return Boolean(
+    (process.env["META_IG_USER_ID"] || process.env["INSTAGRAM_IG_USER_ID"])?.trim() &&
+      (process.env["META_PAGE_ACCESS_TOKEN"] || process.env["INSTAGRAM_ACCESS_TOKEN"])?.trim(),
+  );
+}
 
 function hydrateMetaEnv() {
-  if (hydrated) return;
-  hydrated = true;
+  if (hasMetaEnv()) return;
   for (const fileName of [".env.local", ".env"]) {
     try {
       const full = join(process.cwd(), fileName);
@@ -33,14 +37,17 @@ function hydrateMetaEnv() {
   }
 }
 
-function metaIgUserId() {
+function envMeta(name: (typeof META_KEYS)[number]) {
   hydrateMetaEnv();
-  return (process.env.META_IG_USER_ID || process.env.INSTAGRAM_IG_USER_ID || "").trim();
+  return (process.env[name] || "").trim();
+}
+
+function metaIgUserId() {
+  return envMeta("META_IG_USER_ID") || envMeta("INSTAGRAM_IG_USER_ID");
 }
 
 function metaPageToken() {
-  hydrateMetaEnv();
-  return (process.env.META_PAGE_ACCESS_TOKEN || process.env.INSTAGRAM_ACCESS_TOKEN || "").trim();
+  return envMeta("META_PAGE_ACCESS_TOKEN") || envMeta("INSTAGRAM_ACCESS_TOKEN");
 }
 
 export function metaInstagramConfigured() {
