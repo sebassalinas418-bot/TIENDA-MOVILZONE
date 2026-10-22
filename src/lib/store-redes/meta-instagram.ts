@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import { composeInstagramCaption } from "@/lib/store-free-photos/from-recognition";
 import type { SocialPost } from "@/lib/store-redes/types";
 
 const META_KEYS = ["META_IG_USER_ID", "META_PAGE_ACCESS_TOKEN", "INSTAGRAM_IG_USER_ID", "INSTAGRAM_ACCESS_TOKEN"] as const;
@@ -75,7 +76,7 @@ export async function publishToInstagram(post: SocialPost) {
     };
   }
 
-  const caption = `${post.caption}\n\n${post.hashtags.join(" ")}`.trim();
+  const caption = composeInstagramCaption(post.caption, post.hashtags);
   const graphRoot = instagramGraphRoot(token);
   const container = await graph(`${graphRoot}/${igUserId}/media`, {
     image_url: image,
