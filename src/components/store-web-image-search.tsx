@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { searchWebProductImages } from "@/lib/store-product-images/web-search";
 
 export type WebImageChoice = {
   url: string;
@@ -60,17 +61,9 @@ export function StoreWebImageSearch({
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/store-image-search?q=${encodeURIComponent(term)}`, {
-        credentials: "include",
-      });
-      const body = (await response.json()) as { ok?: boolean; error?: string; items?: WebImageChoice[] };
-      if (!response.ok || !body.ok) {
-        setError(body.error || "No se pudo buscar fotos.");
-        setItems([]);
-        return;
-      }
-      setItems(body.items ?? []);
-      if (!(body.items ?? []).length) setError("No hay fotos para esa búsqueda.");
+      const items = await searchWebProductImages(term);
+      setItems(items);
+      if (!items.length) setError("No hay fotos para esa búsqueda.");
     } catch {
       setError("No se pudo buscar fotos.");
       setItems([]);
