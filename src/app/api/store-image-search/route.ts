@@ -2,7 +2,7 @@ import { connection } from "next/server";
 import { canAccessStoreRedesRequest } from "@/lib/store-redes/access";
 import { searchWebProductImages } from "@/lib/store-product-images/web-search";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
   await connection();
