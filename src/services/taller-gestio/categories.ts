@@ -65,6 +65,38 @@ export function categorySignature(categories: StoreCategorySlice[]) {
   )
 }
 
+/** Une árboles de tienda: el remoto manda el orden; las categorías/subs de la PC que falten se agregan. */
+export function mergeStoreCategoryTrees(
+  primary: StoreCategorySlice[],
+  secondary: StoreCategorySlice[],
+): StoreCategorySlice[] {
+  const byId = new Map(
+    primary.map((item) => [
+      item.id,
+      { ...item, children: [...item.children] },
+    ]),
+  )
+  const order = primary.map((item) => item.id)
+  for (const item of secondary) {
+    const existing = byId.get(item.id)
+    if (!existing) {
+      if (isTallerOrigin(item.origin)) continue
+      order.push(item.id)
+      byId.set(item.id, { ...item, children: [...item.children] })
+      continue
+    }
+    const childIds = new Set(existing.children.map((child) => child.id))
+    for (const child of item.children) {
+      if (childIds.has(child.id) || isTallerOrigin(child.origin)) continue
+      existing.children.push(child)
+      childIds.add(child.id)
+    }
+  }
+  return order
+    .map((id) => byId.get(id))
+    .filter((item): item is StoreCategorySlice => Boolean(item))
+}
+
 export function collectCategoryFilterIds(item: StoreCategorySlice) {
   return [item.id, ...item.children.map((child) => child.id)]
 }

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { describeStock, products as baseProducts, type Product } from "@/data/products";
-import { useStoreConfig } from "@/config/store-config";
+import { defaultStoreConfig, useStoreConfig } from "@/config/store-config";
 import { useOrders } from "@/lib/orders";
 import { fetchTallerCatalog, pushTallerProduct } from "@/services/taller-gestio/browser";
 import { persistStoreProductImage } from "@/lib/store-product-images/client-upload";
@@ -14,8 +14,10 @@ import {
 import { isPersistableProductImage, pickCatalogImage } from "@/lib/store-product-images/public-url";
 import {
   categorySignature,
+  mergeStoreCategoryTrees,
   mergeTallerCategoriesIntoStore,
 } from "@/services/taller-gestio/categories";
+import { fetchCatalogTree, pushCatalogTree } from "@/lib/store-catalog-tree/client";
 import {
   loadProductPlacements,
   saveProductPlacements,
@@ -308,6 +310,10 @@ export function CatalogProvider({
     return next;
   });
   const overlayReady = useRef(initialHidden.length > 0);
+  const categoriesRef = useRef(config.categories);
+  const placementsRef = useRef(placements);
+  categoriesRef.current = config.categories;
+  placementsRef.current = placements;
 
   useEffect(() => {
     setOffers(loadOffers());
@@ -466,13 +472,62 @@ export function CatalogProvider({
   }, [ready]);
 
   useEffect(() => {
+    if (!ready) return;
+    let cancel = false;
+
+    async function pullTree() {
+      const remoteTree = await fetchCatalogTree();
+      if (cancel || !remoteTree) return;
+      const localCats = categoriesRef.current;
+      const remoteCats = remoteTree.categories;
+      const mergedCats = mergeStoreCategoryTrees(remoteCats.length ? remoteCats : localCats, localCats);
+      if (categorySignature(mergedCats) !== categorySignature(localCats)) {
+        updateConfig({ categories: mergedCats }, { persist: false });
+      }
+      const localEdited =
+        categorySignature(localCats) !== categorySignature(defaultStoreConfig.categories);
+      if (localEdited && (!remoteCats.length || categorySignature(mergedCats) !== categorySignature(remoteCats))) {
+        pushCatalogTree({ categories: mergedCats });
+      }
+
+      const remotePlacements = remoteTree.placements ?? {};
+      const localPlacements = placementsRef.current;
+      const mergedPlacements = { ...remotePlacements, ...localPlacements };
+      if (JSON.stringify(mergedPlacements) !== JSON.stringify(localPlacements)) {
+        setPlacements(mergedPlacements);
+      }
+      if (
+        Object.keys(localPlacements).length > 0 &&
+        JSON.stringify(mergedPlacements) !== JSON.stringify(remotePlacements)
+      ) {
+        pushCatalogTree({ placements: mergedPlacements });
+      }
+    }
+
+    void pullTree();
+    const timer = window.setInterval(() => void pullTree(), 15000);
+    const onShow = () => {
+      if (document.visibilityState === "hidden") return;
+      void pullTree();
+    };
+    window.addEventListener("pageshow", onShow);
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      cancel = true;
+      window.clearInterval(timer);
+      window.removeEventListener("pageshow", onShow);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+  }, [ready, updateConfig]);
+
+  useEffect(() => {
     if (!remote?.length) return;
     const merged = mergeTallerCategoriesIntoStore(
       config.categories,
       remote.map((product) => product.category),
     );
     if (categorySignature(merged) === categorySignature(config.categories)) return;
-    updateConfig({ categories: merged });
+    updateConfig({ categories: merged }, { persist: false });
   }, [remote, config.categories, updateConfig]);
 
   const products = useMemo(
@@ -557,13 +612,17 @@ export function CatalogProvider({
       setExtras((current) => current.map((item) => (item.id === productId ? { ...item, title } : item)));
     }
     if (patch.categoryId) {
-      setPlacements((current) => ({
-        ...current,
-        [productId]: {
-          categoryId: patch.categoryId!,
-          subcategoryId: patch.subcategoryId || undefined,
-        },
-      }));
+      setPlacements((current) => {
+        const next = {
+          ...current,
+          [productId]: {
+            categoryId: patch.categoryId!,
+            subcategoryId: patch.subcategoryId || undefined,
+          },
+        };
+        pushCatalogTree({ placements: next });
+        return next;
+      });
       setExtras((current) =>
         current.map((item) =>
           item.id === productId
@@ -647,17 +706,24 @@ export function CatalogProvider({
         body: JSON.stringify({ productId: id, extras: product.extraImages }),
       });
     }
+    if (input.categoryId) {
+      placeProduct(id, input.categoryId, input.subcategoryId);
+    }
     return id;
   }
 
   function placeProduct(productId: string, categoryId: string, subcategoryId?: string) {
-    setPlacements((current) => ({
-      ...current,
-      [productId]: {
-        categoryId,
-        subcategoryId: subcategoryId || undefined,
-      },
-    }));
+    setPlacements((current) => {
+      const next = {
+        ...current,
+        [productId]: {
+          categoryId,
+          subcategoryId: subcategoryId || undefined,
+        },
+      };
+      pushCatalogTree({ placements: next });
+      return next;
+    });
   }
 
   function toggleProductHidden(productId: string) {
@@ -681,6 +747,7 @@ export function CatalogProvider({
       if (!(productId in current)) return current;
       const next = { ...current };
       delete next[productId];
+      pushCatalogTree({ placements: next });
       return next;
     });
   }

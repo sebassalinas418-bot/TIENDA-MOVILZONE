@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { pushCatalogTree } from "@/lib/store-catalog-tree/client";
 
 /**
  * CMS simulado de la tienda. Vive solo en el navegador.
@@ -256,9 +257,13 @@ export const defaultStoreConfig: StoreConfig = {
 const STORAGE_KEY = "movilzone.store-config";
 const CONFIG_REVISION = 2;
 
+export type UpdateConfigOptions = {
+  persist?: boolean;
+};
+
 type StoreConfigContextValue = {
   config: StoreConfig;
-  updateConfig: (partial: Partial<StoreConfig>) => void;
+  updateConfig: (partial: Partial<StoreConfig>, options?: UpdateConfigOptions) => void;
 };
 
 const StoreConfigContext = createContext<StoreConfigContextValue | null>(null);
@@ -291,13 +296,16 @@ export function StoreConfigProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const updateConfig = useCallback((partial: Partial<StoreConfig>) => {
+  const updateConfig = useCallback((partial: Partial<StoreConfig>, options?: UpdateConfigOptions) => {
     setConfig((current) => {
       const next = { ...current, ...partial };
       try {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, revision: CONFIG_REVISION }));
       } catch {
         /* cuota llena */
+      }
+      if (options?.persist !== false && partial.categories) {
+        pushCatalogTree({ categories: next.categories });
       }
       return next;
     });
