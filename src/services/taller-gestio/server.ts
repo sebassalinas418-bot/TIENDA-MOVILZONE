@@ -5,6 +5,10 @@ import {
   slugTallerCategory,
 } from "@/services/taller-gestio/categories";
 import { ensureWebItemsAvailable } from "@/services/taller-gestio/pending-stock";
+import {
+  isStoreDeviceCatalogId,
+  markDeviceCatalogUnitsSold,
+} from "@/services/taller-gestio/storefront-devices";
 
 const WEB_SALE = "web_sale";
 const WEB_ORIGIN = "Venta Web";
@@ -177,6 +181,11 @@ export async function registerWebSale(orderId: string, items: WebSaleItem[]) {
     const quantity = Math.floor(item.quantity);
     if (!item.productId || quantity <= 0) {
       return { ok: false as const, reason: "cantidad" };
+    }
+    if (isStoreDeviceCatalogId(item.productId)) {
+      const sold = await markDeviceCatalogUnitsSold(item.productId, quantity);
+      if (!sold) return { ok: false as const, reason: "stock" };
+      continue;
     }
     const { data, error } = await client
       .from("products")

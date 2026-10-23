@@ -1,5 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { sumReservedByProduct } from "@/lib/web-pending-stock/availability";
+import {
+  isStoreDeviceCatalogId,
+  readDeviceStorefrontProducts,
+} from "@/services/taller-gestio/storefront-devices";
 
 export type PendingSaleItem = {
   productId: string;
@@ -63,15 +67,27 @@ export async function ensureWebItemsAvailable(items: PendingSaleItem[]) {
   const ids = Object.keys(needed);
   if (!ids.length) return { ok: false as const, reason: "reservado" as const };
 
-  const [reserved, stockResult] = await Promise.all([
-    readPendingReservations(),
-    client.from("products").select("id, stock").eq("shop_id", shopId).in("id", ids),
-  ]);
-  if (stockResult.error) throw new Error(stockResult.error.message);
+  const accessoryIds = ids.filter((id) => !isStoreDeviceCatalogId(id));
+  const deviceIds = ids.filter(isStoreDeviceCatalogId);
 
+  const reserved = await readPendingReservations();
   const physical: Record<string, number> = {};
-  for (const row of stockResult.data ?? []) {
-    physical[String(row.id)] = Math.max(0, Math.floor(Number(row.stock) || 0));
+
+  if (accessoryIds.length) {
+    const stockResult = await client
+      .from("products")
+      .select("id, stock")
+      .eq("shop_id", shopId)
+      .in("id", accessoryIds);
+    if (stockResult.error) throw new Error(stockResult.error.message);
+    for (const row of stockResult.data ?? []) {
+      physical[String(row.id)] = Math.max(0, Math.floor(Number(row.stock) || 0));
+    }
+  }
+
+  if (deviceIds.length) {
+    const listed = await readDeviceStorefrontProducts();
+    for (const item of listed) physical[item.id] = item.stock;
   }
 
   for (const [productId, quantity] of Object.entries(needed)) {

@@ -1,5 +1,6 @@
 import { applyPendingHoldToProduct } from "@/lib/web-pending-stock/availability";
 import { readPendingReservations } from "@/services/taller-gestio/pending-stock";
+import { readDeviceStorefrontProducts } from "@/services/taller-gestio/storefront-devices";
 import { readTallerCatalog } from "@/services/taller-gestio/server";
 
 function withTimeout<T>(promise: Promise<T>, ms: number) {
@@ -21,11 +22,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number) {
 export async function readStorefrontCatalog() {
   const products = await readTallerCatalog();
   if (!products) return null;
-  let reserved: Record<string, number> = {};
-  try {
-    reserved = await withTimeout(readPendingReservations(), 2500);
-  } catch {
-    reserved = {};
-  }
-  return products.map((product) => applyPendingHoldToProduct(product, reserved[product.id] ?? 0));
+  const [reserved, devices] = await Promise.all([
+    withTimeout(readPendingReservations(), 2500).catch(() => ({}) as Record<string, number>),
+    withTimeout(readDeviceStorefrontProducts(), 2500).catch(() => [] as Awaited<ReturnType<typeof readDeviceStorefrontProducts>>),
+  ]);
+  return [...products, ...devices].map((product) =>
+    applyPendingHoldToProduct(product, reserved[product.id] ?? 0),
+  );
 }

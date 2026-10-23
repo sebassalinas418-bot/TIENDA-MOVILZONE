@@ -43,6 +43,9 @@ export function defaultCategoryImage(slug: string) {
     return "/categories/audio.jpg"
   }
   if (slug.includes("soporte")) return "/categories/accesorios.jpg"
+  if (slug.includes("celular") || slug.includes("telefono") || slug.includes("equipo")) {
+    return "/categories/accesorios.jpg"
+  }
   return "/categories/todo.jpg"
 }
 

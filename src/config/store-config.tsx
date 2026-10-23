@@ -155,6 +155,13 @@ export const defaultStoreConfig: StoreConfig = {
   ],
   categories: [
     {
+      id: "celulares",
+      name: "Celulares",
+      image: "/categories/accesorios.jpg",
+      origin: "store",
+      children: [],
+    },
+    {
       id: "fundas",
       name: "Fundas y Carcasas",
       image: "/categories/fundas.jpg",

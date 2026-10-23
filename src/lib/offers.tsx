@@ -647,6 +647,7 @@ export function CatalogProvider({
     const persistImage = isPersistableProductImage(patch.image) ? patch.image!.trim() : "";
     if (!priceChanged && !stockChanged && !offerChanged && !persistImage && !titleChanged && !categoryChanged && !detailsChanged) return;
     if (persistImage) void persistStoreProductImage(productId, persistImage);
+    if (productId.startsWith("eq-")) return;
     const originalImage =
       (remote ?? []).find((item) => item.id === productId)?.image ??
       extras.find((item) => item.id === productId)?.image ??

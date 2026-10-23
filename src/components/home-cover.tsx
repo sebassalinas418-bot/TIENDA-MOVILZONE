@@ -14,12 +14,13 @@ import { storeFeaturedGridClass } from "@/lib/store-product-grid/mobile";
 import { StoreOfferSticker } from "@/components/store-offer-sticker";
 
 const categoryRank: Record<string, number> = {
-  cargadores: 0,
-  accesorios: 1,
-  auriculares: 2,
-  soportes: 3,
-  protectores: 4,
-  fundas: 5,
+  celulares: 0,
+  cargadores: 1,
+  accesorios: 2,
+  auriculares: 3,
+  soportes: 4,
+  protectores: 5,
+  fundas: 6,
 };
 
 function pickFeatured(products: CatalogProduct[]) {
