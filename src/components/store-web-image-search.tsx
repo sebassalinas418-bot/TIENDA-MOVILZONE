@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { searchWebProductImages } from "@/lib/store-product-images/web-search";
 
 export type WebImageChoice = {
   url: string;
@@ -61,9 +60,18 @@ export function StoreWebImageSearch({
     setLoading(true);
     setError("");
     try {
-      const items = await searchWebProductImages(term);
-      setItems(items);
-      if (!items.length) setError("No hay fotos para esa búsqueda.");
+      const params = new URLSearchParams({ q: term });
+      const response = await fetch(`/api/search-images?${params.toString()}`, {
+        credentials: "include",
+      });
+      const body = (await response.json()) as { ok?: boolean; error?: string; items?: WebImageChoice[] };
+      if (!response.ok || !body.ok) {
+        setError(body.error || "No se pudo buscar fotos.");
+        setItems([]);
+        return;
+      }
+      setItems(body.items ?? []);
+      if (!(body.items ?? []).length) setError("No hay fotos para esa búsqueda.");
     } catch {
       setError("No se pudo buscar fotos.");
       setItems([]);
@@ -151,8 +159,14 @@ export function StoreWebImageSearch({
               </div>
             </div>
           ) : null}
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-sm font-medium text-sky-700">
+              <span className="size-5 animate-spin rounded-full border-2 border-sky-200 border-t-sky-600" />
+              Buscando fotos…
+            </div>
+          ) : null}
           {error ? <p className="mb-3 text-sm font-medium text-rose-600">{error}</p> : null}
-          {items.length > 0 ? (
+          {!loading && items.length > 0 ? (
             <ul className="grid grid-cols-3 gap-2">
               {items.map((item) => {
                 const selected = pending?.url === item.url;
