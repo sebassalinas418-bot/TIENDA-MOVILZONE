@@ -207,7 +207,10 @@ export const StoreProductImageField = forwardRef<StoreProductImageFieldHandle, S
     }
     setStage("compressing");
     try {
-      const response = await fetch(`/api/store-image-fetch?url=${encodeURIComponent(hit.url)}`, {
+      const fetchUrl = new URL("/api/store-image-fetch", window.location.origin);
+      fetchUrl.searchParams.set("url", hit.url);
+      if (hit.thumb && hit.thumb !== hit.url) fetchUrl.searchParams.set("thumb", hit.thumb);
+      const response = await fetch(fetchUrl.toString(), {
         credentials: "include",
       });
       if (!response.ok) throw new Error("No se pudo descargar esa foto.");

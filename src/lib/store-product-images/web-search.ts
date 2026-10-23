@@ -4,6 +4,15 @@ export type WebImageHit = {
   title: string;
 };
 
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
+
+const BROWSER_HEADERS = {
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+  "User-Agent": BROWSER_UA,
+};
+
 function cseKey() {
   return (
     process.env.GOOGLE_CSE_API_KEY?.trim() ||
@@ -34,6 +43,22 @@ function asHits(items: Array<{ url?: string; thumb?: string; title?: string }>):
   return hits;
 }
 
+function extractVqd(html: string) {
+  return (
+    html.match(/vqd=["']([^"']+)["']/)?.[1] ||
+    html.match(/\bvqd=([^&"'<\s]+)/)?.[1] ||
+    ""
+  );
+}
+
+function cookieHeader(response: Response) {
+  const cookies =
+    typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
+  if (cookies.length) return cookies.map((item) => item.split(";")[0]).join("; ");
+  const single = response.headers.get("set-cookie");
+  return single ? single.split(";")[0] : "";
+}
+
 async function searchGoogleCse(query: string): Promise<WebImageHit[] | null> {
   const key = cseKey();
   const cx = cseCx();
@@ -60,37 +85,40 @@ async function searchGoogleCse(query: string): Promise<WebImageHit[] | null> {
 }
 
 async function searchDuckDuckGo(query: string): Promise<WebImageHit[]> {
-  const landing = await fetch(`https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`, {
-    headers: { Accept: "text/html", "User-Agent": "MovilzoneStore/1.0" },
+  const landing = await fetch(`https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images&iar=images&t=h_`, {
+    headers: BROWSER_HEADERS,
     cache: "no-store",
     redirect: "follow",
   });
   if (!landing.ok) throw new Error("No se pudo buscar imágenes.");
   const html = await landing.text();
-  const vqd =
-    html.match(/vqd=["']([\d-]+)["']/)?.[1] ||
-    html.match(/vqd=([\d-]+)/)?.[1] ||
-    "";
+  const vqd = extractVqd(html);
   if (!vqd) throw new Error("No se pudo iniciar la búsqueda de imágenes.");
   const api = new URL("https://duckduckgo.com/i.js");
-  api.searchParams.set("l", "wt-wt");
   api.searchParams.set("o", "json");
   api.searchParams.set("q", query);
+  api.searchParams.set("u", "bing");
+  api.searchParams.set("l", "ar-es");
   api.searchParams.set("vqd", vqd);
-  api.searchParams.set("f", ",,,,,");
   api.searchParams.set("p", "1");
-  const response = await fetch(api, {
-    headers: {
-      Accept: "application/json",
-      Referer: "https://duckduckgo.com/",
-      "User-Agent": "MovilzoneStore/1.0",
-    },
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error("No se pudo buscar imágenes.");
-  const payload = (await response.json()) as {
-    results?: { image?: string; thumbnail?: string; title?: string }[];
+  api.searchParams.set("f", ",,,");
+  const headers: Record<string, string> = {
+    Accept: "application/json, text/javascript, */*; q=0.01",
+    "Accept-Language": BROWSER_HEADERS["Accept-Language"],
+    Referer: "https://duckduckgo.com/",
+    "User-Agent": BROWSER_UA,
   };
+  const cookie = cookieHeader(landing);
+  if (cookie) headers.Cookie = cookie;
+  const response = await fetch(api, { headers, cache: "no-store" });
+  if (!response.ok) throw new Error("No se pudo buscar imágenes.");
+  const raw = await response.text();
+  let payload: { results?: { image?: string; thumbnail?: string; title?: string }[] };
+  try {
+    payload = JSON.parse(raw) as typeof payload;
+  } catch {
+    throw new Error("No se pudo buscar imágenes.");
+  }
   return asHits(
     (payload.results ?? []).map((item) => ({
       url: item.image,
@@ -100,10 +128,56 @@ async function searchDuckDuckGo(query: string): Promise<WebImageHit[]> {
   );
 }
 
+async function searchWikimedia(query: string): Promise<WebImageHit[]> {
+  const endpoint = new URL("https://commons.wikimedia.org/w/api.php");
+  endpoint.searchParams.set("action", "query");
+  endpoint.searchParams.set("format", "json");
+  endpoint.searchParams.set("origin", "*");
+  endpoint.searchParams.set("generator", "search");
+  endpoint.searchParams.set("gsrsearch", query);
+  endpoint.searchParams.set("gsrnamespace", "6");
+  endpoint.searchParams.set("gsrlimit", "20");
+  endpoint.searchParams.set("prop", "imageinfo");
+  endpoint.searchParams.set("iiprop", "url|mime");
+  endpoint.searchParams.set("iiurlwidth", "400");
+  const response = await fetch(endpoint, { headers: { "User-Agent": BROWSER_UA }, cache: "no-store" });
+  if (!response.ok) return [];
+  const payload = (await response.json()) as {
+    query?: {
+      pages?: Record<
+        string,
+        {
+          title?: string;
+          imageinfo?: { url?: string; thumburl?: string; mime?: string }[];
+        }
+      >;
+    };
+  };
+  const pages = Object.values(payload.query?.pages ?? {});
+  return asHits(
+    pages.map((page) => {
+      const info = page.imageinfo?.[0];
+      return {
+        url: info?.url,
+        thumb: info?.thumburl || info?.url,
+        title: page.title?.replace(/^File:/, "") ?? "",
+      };
+    }),
+  );
+}
+
 export async function searchWebProductImages(query: string): Promise<WebImageHit[]> {
   const term = query.trim().slice(0, 120);
   if (term.length < 2) throw new Error("Escribí al menos 2 letras para buscar.");
   const cse = await searchGoogleCse(term);
   if (cse && cse.length > 0) return cse;
-  return searchDuckDuckGo(term);
+  try {
+    const ddg = await searchDuckDuckGo(term);
+    if (ddg.length > 0) return ddg;
+  } catch {
+    /* Wikimedia cubre si DuckDuckGo bloquea el scraping */
+  }
+  const wiki = await searchWikimedia(term);
+  if (wiki.length > 0) return wiki;
+  throw new Error("No se pudo buscar imágenes.");
 }
