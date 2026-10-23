@@ -188,7 +188,9 @@ async function loadDeviceRows(client: SupabaseClient, shopId: string): Promise<D
 }
 
 function inStockDevices(rows: DeviceStockRow[], quote: number) {
-  return rows.map((row) => mapRow(row, quote)).filter((item): item is CatalogDevice => Boolean(item) && item.status === "En stock");
+  return rows
+    .map((row) => mapRow(row, quote))
+    .filter((item): item is CatalogDevice => item !== null && item.status === "En stock");
 }
 
 export async function readDeviceStorefrontProducts(): Promise<Product[]> {
