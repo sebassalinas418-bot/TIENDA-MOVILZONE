@@ -20,12 +20,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number) {
 }
 
 export async function readStorefrontCatalog() {
-  const products = await readTallerCatalog();
-  if (!products) return null;
-  const [reserved, devices] = await Promise.all([
+  const [products, reserved, devices] = await Promise.all([
+    readTallerCatalog(),
     withTimeout(readPendingReservations(), 2500).catch(() => ({}) as Record<string, number>),
-    withTimeout(readDeviceStorefrontProducts(), 2500).catch(() => [] as Awaited<ReturnType<typeof readDeviceStorefrontProducts>>),
+    withTimeout(readDeviceStorefrontProducts(), 2500).catch(
+      () => [] as Awaited<ReturnType<typeof readDeviceStorefrontProducts>>,
+    ),
   ]);
+  if (!products) return null;
   return [...products, ...devices].map((product) =>
     applyPendingHoldToProduct(product, reserved[product.id] ?? 0),
   );

@@ -122,10 +122,10 @@ export async function readTallerCatalog(): Promise<Product[] | null> {
     .from("products")
     .select("id, name, category, stock, sale_price, image_url, is_active, sku, descripcion")
     .eq("shop_id", shopId)
-    .eq("is_active", true)
     .order("name", { ascending: true });
   if (error) throw new Error(error.message);
   return ((data ?? []) as ProductRow[])
+    .filter((row) => row.is_active !== false)
     .map(mapRow)
     .filter((product) => product.title.trim().length > 0);
 }

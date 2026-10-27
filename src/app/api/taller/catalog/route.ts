@@ -27,7 +27,7 @@ export async function GET() {
     return Response.json({ connected: false, products: [] }, { headers: noStore });
   }
   try {
-    const products = await withTimeout(readStorefrontCatalog(), 4000);
+    const products = await withTimeout(readStorefrontCatalog(), 8000);
     return Response.json(
       { connected: products !== null, products: products ?? [] },
       { headers: noStore },
