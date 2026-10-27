@@ -90,9 +90,9 @@ function persistableInventoryImage(image?: string) {
 
 function mapRow(row: ProductRow): Product {
   const category = row.category.trim() || "Otros";
-  const categoryId = slugTallerCategory(category);
   const key = category.toLowerCase();
   const mapped = categoryMap[key];
+  const categoryId = mapped?.categoryId ?? slugTallerCategory(category);
   const stock = Math.max(0, Math.floor(Number(row.stock) || 0));
   const described = describeStock(stock);
   return {
@@ -100,7 +100,7 @@ function mapRow(row: ProductRow): Product {
     title: row.name,
     category,
     categoryId,
-    subcategoryId: "",
+    subcategoryId: mapped?.subcategoryId ?? "",
     brand: "Genérico",
     price: Math.max(0, Math.round(Number(row.sale_price) || 0)),
     image: row.image_url || mapped?.image || defaultCategoryImage(categoryId),
