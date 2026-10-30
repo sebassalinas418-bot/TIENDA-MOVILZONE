@@ -2,7 +2,9 @@ import { randomUUID } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { connection } from "next/server";
 import { canAccessStoreRedesRequest } from "@/lib/store-redes/access";
+import { writeDeviceCatalogImage } from "@/lib/store-device-images/server";
 import { isSharedProductImage } from "@/lib/store-product-images/public-url";
+import { isStoreDeviceCatalogId } from "@/services/taller-gestio/storefront-devices";
 
 const BUCKET = "product-images";
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -25,6 +27,9 @@ function shopId() {
 
 async function writeProductImageUrl(productId: string, imageUrl: string) {
   if (!productId || productId.startsWith("extra-") || !isSharedProductImage(imageUrl)) return false;
+  if (isStoreDeviceCatalogId(productId)) {
+    return writeDeviceCatalogImage(productId, imageUrl);
+  }
   const client = socialDb();
   const shop = shopId();
   if (!client || !shop) return false;
@@ -95,7 +100,7 @@ export async function PUT(request: Request) {
   }
   const saved = await writeProductImageUrl(productId, image);
   if (!saved) {
-    return Response.json({ error: "No se pudo guardar image_url en el producto." }, { status: 502 });
+    return Response.json({ error: "No se pudo guardar la imagen." }, { status: 502 });
   }
   return Response.json({ ok: true, url: image });
 }

@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { describeStock, type Product } from "@/data/products";
+import { readDeviceCatalogImages } from "@/lib/store-device-images/server";
+import { isSharedProductImage } from "@/lib/store-product-images/public-url";
 import { defaultCategoryImage } from "@/services/taller-gestio/categories";
 
 export const STORE_DEVICE_ID_PREFIX = "eq-";
@@ -198,7 +200,11 @@ export async function readDeviceStorefrontProducts(): Promise<Product[]> {
   if (!client) return [];
   const shopId = await resolveShopId(client);
   if (!shopId) return [];
-  const [quote, rows] = await Promise.all([readCriptoVenta(), loadDeviceRows(client, shopId)]);
+  const [quote, rows, catalogImages] = await Promise.all([
+    readCriptoVenta(),
+    loadDeviceRows(client, shopId),
+    readDeviceCatalogImages(),
+  ]);
   const grouped = new Map<string, CatalogDevice[]>();
   for (const item of inStockDevices(rows, quote)) {
     const list = grouped.get(item.catalogId) ?? [];
@@ -218,6 +224,7 @@ export async function readDeviceStorefrontProducts(): Promise<Product[]> {
     const specs = [first.color, first.storage].filter(Boolean).join(" · ");
     const title = `${first.brand} ${first.model}`.trim();
     const details = [first.condition, specs, first.notes].filter(Boolean).join(" · ");
+    const catalogImage = catalogImages[id];
     products.push({
       id,
       title: specs ? `${title} (${specs})` : title,
@@ -226,7 +233,7 @@ export async function readDeviceStorefrontProducts(): Promise<Product[]> {
       subcategoryId: subcategoryId(first.condition),
       brand: first.brand || "Genérico",
       price,
-      image: CELULARES.image,
+      image: isSharedProductImage(catalogImage) ? catalogImage : CELULARES.image,
       stock,
       stockLabel: described.stockLabel,
       inStock: described.inStock,

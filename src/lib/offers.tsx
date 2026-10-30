@@ -11,7 +11,7 @@ import {
   normalizeExtraImages,
   saveExtraImagesOverlay,
 } from "@/lib/store-product-images/extras";
-import { isPersistableProductImage, pickCatalogImage } from "@/lib/store-product-images/public-url";
+import { isPersistableProductImage, isSharedProductImage, pickCatalogImage } from "@/lib/store-product-images/public-url";
 import {
   categorySignature,
   mergeStoreCategoryTrees,
@@ -310,6 +310,7 @@ export function CatalogProvider({
     return next;
   });
   const overlayReady = useRef(initialHidden.length > 0);
+  const syncedDeviceImages = useRef(new Set<string>());
   const categoriesRef = useRef(config.categories);
   const placementsRef = useRef(placements);
   categoriesRef.current = config.categories;
@@ -327,6 +328,17 @@ export function CatalogProvider({
     setHidden((current) => (Object.keys(current).length > 0 ? current : localHidden));
     setReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    for (const [id, image] of Object.entries(images)) {
+      if (!id.startsWith("eq-") || !isSharedProductImage(image)) continue;
+      const key = `${id}:${image}`;
+      if (syncedDeviceImages.current.has(key)) continue;
+      syncedDeviceImages.current.add(key);
+      void persistStoreProductImage(id, image);
+    }
+  }, [ready, images]);
 
   useEffect(() => {
     if (!ready) return;
