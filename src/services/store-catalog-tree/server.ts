@@ -1,5 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
-import type { CategoryOrigin, StoreCategorySlice } from "@/services/taller-gestio/categories";
+import {
+  detachCablesAsTopLevel,
+  remapCablesPlacements,
+  type CategoryOrigin,
+  type StoreCategorySlice,
+} from "@/services/taller-gestio/categories";
 import type { StoreProductPlacement } from "@/lib/store-product-placements";
 
 const BUCKET = "product-images";
@@ -133,7 +138,10 @@ export function sanitizeCatalogTree(input: {
       if (Object.keys(placements).length >= MAX_PLACEMENTS) break;
     }
   }
-  return { categories, placements };
+  return {
+    categories: detachCablesAsTopLevel(categories),
+    placements: remapCablesPlacements(placements),
+  };
 }
 
 async function allowCatalogJson(client: NonNullable<ReturnType<typeof socialDb>>) {

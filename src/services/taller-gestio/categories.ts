@@ -108,18 +108,81 @@ export function alignStoreMenuToTallerInventory(
 ) {
   const merged = mergeTallerCategoriesIntoStore(current, liveNames)
   const live = liveInventoryKeys(liveNames)
-  return merged
-    .map((item) => ({
-      ...item,
-      children: item.children.filter((child) =>
-        keepAlignedNode(child.id, child.name, child.origin, live),
+  return detachCablesAsTopLevel(
+    merged
+      .map((item) => ({
+        ...item,
+        children: item.children.filter((child) =>
+          keepAlignedNode(child.id, child.name, child.origin, live),
+        ),
+      }))
+      .filter(
+        (item) =>
+          keepAlignedNode(item.id, item.name, item.origin, live) ||
+          item.children.length > 0,
       ),
-    }))
-    .filter(
-      (item) =>
-        keepAlignedNode(item.id, item.name, item.origin, live) ||
-        item.children.length > 0,
-    )
+  )
+}
+
+function isCablesNode(id: string, name: string) {
+  const slug = slugTallerCategory(name)
+  return id === "cables" || slug === "cables" || slug === "cable"
+}
+
+function isCargadoresNode(id: string, name: string) {
+  const slug = slugTallerCategory(name)
+  return id === "cargadores" || slug === "cargadores"
+}
+
+/** Cables queda categoría principal, nunca hija de Cargadores, y arriba de Cargadores. */
+export function detachCablesAsTopLevel(categories: StoreCategorySlice[]) {
+  let cables: StoreCategorySlice | undefined
+  const rest: StoreCategorySlice[] = []
+  for (const item of categories) {
+    const nested = item.children.find((child) => isCablesNode(child.id, child.name))
+    if (nested && !cables) {
+      cables = {
+        id: nested.id || "cables",
+        name: nested.name,
+        image: nested.image || defaultCategoryImage("cables"),
+        origin: nested.origin ?? item.origin ?? "taller",
+        children: [],
+      }
+    }
+    if (isCablesNode(item.id, item.name)) {
+      if (!cables) {
+        cables = {
+          ...item,
+          children: item.children.filter((child) => !isCablesNode(child.id, child.name)),
+        }
+      }
+      continue
+    }
+    rest.push({
+      ...item,
+      children: item.children.filter((child) => !isCablesNode(child.id, child.name)),
+    })
+  }
+  if (!cables) return rest
+  const insertAt = rest.findIndex((item) => isCargadoresNode(item.id, item.name))
+  if (insertAt < 0) return [...rest, cables]
+  const next = [...rest]
+  next.splice(insertAt, 0, cables)
+  return next
+}
+
+export function remapCablesPlacements<T extends { categoryId: string; subcategoryId?: string }>(
+  placements: Record<string, T>,
+): Record<string, T> {
+  const next: Record<string, T> = {}
+  for (const [id, placed] of Object.entries(placements)) {
+    if (placed.subcategoryId === "cables" || placed.categoryId === "cables") {
+      next[id] = { ...placed, categoryId: "cables", subcategoryId: undefined }
+    } else {
+      next[id] = placed
+    }
+  }
+  return next
 }
 
 export function categorySignature(categories: StoreCategorySlice[]) {

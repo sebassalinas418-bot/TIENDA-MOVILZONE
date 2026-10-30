@@ -1,4 +1,8 @@
-import type { StoreCategorySlice } from "@/services/taller-gestio/categories";
+import {
+  detachCablesAsTopLevel,
+  remapCablesPlacements,
+  type StoreCategorySlice,
+} from "@/services/taller-gestio/categories";
 import type { StoreProductPlacement } from "@/lib/store-product-placements";
 
 function hierarchySignature(categories: StoreCategorySlice[]) {
@@ -64,11 +68,13 @@ export async function persistPublishedCatalogTree(
   categories: StoreCategorySlice[],
   placements?: Record<string, StoreProductPlacement>,
 ) {
+  const nextCategories = detachCablesAsTopLevel(categories);
+  const nextPlacements = placements ? remapCablesPlacements(placements) : undefined;
   skipPullUntil = Date.now() + 25000;
   queued = {
     ...(queued ?? {}),
-    categories,
-    ...(placements ? { placements } : {}),
+    categories: nextCategories,
+    ...(nextPlacements ? { placements: nextPlacements } : {}),
   };
   notifyQueue();
   const result = await flushCatalogTree({ force: true });
@@ -81,7 +87,7 @@ export async function persistPublishedCatalogTree(
   for (let attempt = 0; attempt < 4; attempt += 1) {
     if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
     const remote = await fetchCatalogTree();
-    if (remote && hierarchySignature(remote.categories) === hierarchySignature(categories)) {
+    if (remote && hierarchySignature(remote.categories) === hierarchySignature(nextCategories)) {
       confirmed = remote.categories;
       break;
     }

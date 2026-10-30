@@ -38,7 +38,7 @@ const categoryMap: Record<string, { categoryId: string; subcategoryId: string; i
   vidrios: { categoryId: "vidrios-templados", subcategoryId: "", image: "/categories/protectores.jpg" },
   "vidrios templados": { categoryId: "vidrios-templados", subcategoryId: "", image: "/categories/protectores.jpg" },
   cargadores: { categoryId: "cargadores", subcategoryId: "cargadores-rapidos", image: "/categories/cargadores.jpg" },
-  cables: { categoryId: "cargadores", subcategoryId: "cables", image: "/categories/cables.jpg" },
+  cables: { categoryId: "cables", subcategoryId: "", image: "/categories/cables.jpg" },
   auriculares: { categoryId: "auriculares", subcategoryId: "inalambricos", image: "/categories/auriculares.jpg" },
   soportes: { categoryId: "soporte", subcategoryId: "", image: "/categories/accesorios.jpg" },
 };
