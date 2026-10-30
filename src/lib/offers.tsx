@@ -14,7 +14,7 @@ import {
 import { isPersistableProductImage, isSharedProductImage, pickCatalogImage } from "@/lib/store-product-images/public-url";
 import {
   categorySignature,
-  mergeTallerCategoriesIntoStore,
+  alignStoreMenuToTallerInventory,
 } from "@/services/taller-gestio/categories";
 import {
   catalogTreeIsPending,
@@ -319,6 +319,7 @@ export function CatalogProvider({
   const categoriesRef = useRef(config.categories);
   const placementsRef = useRef(placements);
   const remoteRef = useRef(remote);
+  const liveCategoryNamesRef = useRef<string[]>([]);
   categoriesRef.current = config.categories;
   placementsRef.current = placements;
   remoteRef.current = remote;
@@ -502,11 +503,22 @@ export function CatalogProvider({
       const localCats = categoriesRef.current;
       const remoteCats = remoteTree.categories;
       const catalog = remoteRef.current ?? [];
-      const nextCats = catalog.length
-        ? mergeTallerCategoriesIntoStore(
-            remoteCats,
-            catalog.map((product) => product.category),
-          )
+      let tableNames: string[] = [];
+      try {
+        const response = await fetch("/api/taller/inventory-categories", { cache: "no-store" });
+        const body = (await response.json()) as { names?: unknown };
+        tableNames = Array.isArray(body.names)
+          ? body.names.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+          : [];
+      } catch {
+        tableNames = [];
+      }
+      const liveNames = [
+        ...new Set([...tableNames, ...catalog.map((product) => product.category)]),
+      ].filter((name) => name.trim());
+      liveCategoryNamesRef.current = liveNames;
+      const nextCats = liveNames.length
+        ? alignStoreMenuToTallerInventory(remoteCats, liveNames)
         : remoteCats;
       if (nextCats.length && categorySignature(nextCats) !== categorySignature(localCats)) {
         updateConfig({ categories: nextCats }, { persist: false });
@@ -538,10 +550,10 @@ export function CatalogProvider({
 
   useEffect(() => {
     if (!remote?.length) return;
-    const merged = mergeTallerCategoriesIntoStore(
-      config.categories,
-      remote.map((product) => product.category),
-    );
+    const liveNames = [
+      ...new Set([...liveCategoryNamesRef.current, ...remote.map((product) => product.category)]),
+    ].filter((name) => name.trim());
+    const merged = alignStoreMenuToTallerInventory(config.categories, liveNames);
     if (categorySignature(merged) === categorySignature(config.categories)) return;
     updateConfig({ categories: merged }, { persist: false });
   }, [remote, config.categories, updateConfig]);
@@ -554,13 +566,18 @@ export function CatalogProvider({
           { categoryId: product.categoryId, subcategoryId: product.subcategoryId },
           placements,
         );
-        const parent =
-          config.categories.find((item) => item.id === vis.categoryId) ??
+        const findParent = (categoryId: string, subcategoryId: string) =>
+          config.categories.find((item) => item.id === categoryId) ??
           config.categories.find((item) =>
-            item.children.some((child) => child.id === vis.categoryId || child.id === vis.subcategoryId),
+            item.children.some((child) => child.id === categoryId || child.id === subcategoryId),
           );
+        const placedParent = findParent(vis.categoryId, vis.subcategoryId);
+        const fallback = placedParent
+          ? vis
+          : { categoryId: product.categoryId, subcategoryId: product.subcategoryId ?? "" };
+        const parent = placedParent ?? findParent(fallback.categoryId, fallback.subcategoryId);
         const child = parent?.children.find(
-          (item) => item.id === vis.subcategoryId || item.id === vis.categoryId,
+          (item) => item.id === fallback.subcategoryId || item.id === fallback.categoryId,
         );
         return {
           ...applyOffer(
@@ -569,8 +586,8 @@ export function CatalogProvider({
               price: prices[product.id] ?? product.price,
               image: pickCatalogImage(images[product.id], product.image),
               category: parent?.name ?? product.category,
-              categoryId: parent?.id ?? vis.categoryId,
-              subcategoryId: (child && vis.subcategoryId ? child.id : vis.subcategoryId) ?? "",
+              categoryId: parent?.id ?? fallback.categoryId,
+              subcategoryId: (child && fallback.subcategoryId ? child.id : fallback.subcategoryId) ?? "",
             },
             offers[product.id],
           ),

@@ -67,6 +67,61 @@ export function isBuiltinStoreCategory(id: string) {
   return BUILTIN_STORE_CATEGORY_IDS.has(id)
 }
 
+const STORE_ONLY_CHILD_IDS = new Set([
+  "silicona",
+  "rigidas",
+  "disenos",
+  "magsafe",
+  "cargadores-rapidos",
+  "inalambricos",
+  "energia",
+  "celulares-nuevos",
+])
+
+function liveInventoryKeys(names: string[]) {
+  const live = new Set<string>()
+  for (const name of names) {
+    const trimmed = name.trim()
+    if (!trimmed) continue
+    live.add(trimmed.toLowerCase())
+    live.add(slugTallerCategory(trimmed))
+  }
+  return live
+}
+
+function keepAlignedNode(
+  id: string,
+  name: string,
+  origin: CategoryOrigin | undefined,
+  live: Set<string>,
+) {
+  if (live.has(id) || live.has(slugTallerCategory(name))) return true
+  if (STORE_ONLY_CHILD_IDS.has(id) || isBuiltinStoreCategory(id)) return true
+  if (isTallerOrigin(origin)) return false
+  return false
+}
+
+/** Deja el menú de la tienda alineado a las categorías vivas de Taller. */
+export function alignStoreMenuToTallerInventory(
+  current: StoreCategorySlice[],
+  liveNames: string[],
+) {
+  const merged = mergeTallerCategoriesIntoStore(current, liveNames)
+  const live = liveInventoryKeys(liveNames)
+  return merged
+    .map((item) => ({
+      ...item,
+      children: item.children.filter((child) =>
+        keepAlignedNode(child.id, child.name, child.origin, live),
+      ),
+    }))
+    .filter(
+      (item) =>
+        keepAlignedNode(item.id, item.name, item.origin, live) ||
+        item.children.length > 0,
+    )
+}
+
 export function categorySignature(categories: StoreCategorySlice[]) {
   return JSON.stringify(
     categories.map((item) => ({
