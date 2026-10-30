@@ -30,11 +30,11 @@ import {
   collectCategoryFilterIds,
   isTallerOrigin,
   nestTallerCategory,
+  promoteChildToTopLevel,
   removeStoreCategory,
   removeStoreChild,
   reorderChildren,
   reorderTopLevel,
-  unnestTallerCategory,
 } from "@/services/taller-gestio/categories";
 
 const CAT_DRAG = "text/plain";
@@ -213,6 +213,16 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     categoryName: string;
     label: string;
   } | null>(null);
+  const [relocateSub, setRelocateSub] = useState<{
+    mode: "child" | "top";
+    parentId: string;
+    childId: string;
+    childName: string;
+    parentName: string;
+    products: { id: string; title: string }[];
+    dest: string;
+  } | null>(null);
+  const [relocating, setRelocating] = useState(false);
   const [session, setSession] = useState<DemoSession | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const { addItem, openCart, closeCart } = useCart();
@@ -462,26 +472,145 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     );
   }
 
-  function restoreTallerCategory(tallerId: string) {
+  function promoteSubcategoryToMain(parentId: string, childId: string) {
+    const parent = config.categories.find((item) => item.id === parentId);
+    const child = parent?.children.find((item) => item.id === childId);
+    if (!parent || !child) return;
+    const inSub = productsInSubcategory(parentId, childId);
     updateConfig({
-      categories: unnestTallerCategory(config.categories, tallerId),
+      categories: promoteChildToTopLevel(config.categories, parentId, childId),
     });
+    for (const product of inSub) {
+      void updateProduct(product.id, {
+        category: child.name,
+        categoryId: child.id,
+        subcategoryId: "",
+      });
+    }
+    setFilter({ kind: "category", categoryId: child.id });
   }
 
   function deleteCreatedCategory(storeId: string) {
-    const next = removeStoreCategory(config.categories, storeId);
-    updateConfig({ categories: next });
+    const item = config.categories.find((entry) => entry.id === storeId);
+    if (!item) return;
+    const ids = new Set(collectCategoryFilterIds(item));
+    const inCat = products.filter((product) => {
+      const vis = storeVisibleCategory(
+        product.id,
+        { categoryId: product.categoryId, subcategoryId: product.subcategoryId },
+        placements,
+      );
+      return ids.has(vis.categoryId) || ids.has(vis.subcategoryId);
+    });
+    const fallback = config.categories.find(
+      (entry) => entry.id !== storeId && !isTallerOrigin(entry.origin),
+    ) ?? config.categories.find((entry) => entry.id !== storeId);
+    if (inCat.length > 0 && fallback) {
+      setRelocateSub({
+        mode: "top",
+        parentId: "",
+        childId: storeId,
+        childName: item.name,
+        parentName: item.name,
+        products: inCat.map((product) => ({ id: product.id, title: product.title })),
+        dest: `cat:${fallback.id}`,
+      });
+      return;
+    }
+    updateConfig({ categories: removeStoreCategory(config.categories, storeId) });
     if (filter.kind !== "all" && filter.categoryId === storeId) {
       setFilter({ kind: "all" });
     }
   }
 
-  function deleteCreatedChild(parentId: string, childId: string) {
+  function productsInSubcategory(parentId: string, childId: string) {
+    return products.filter((product) => {
+      const vis = storeVisibleCategory(
+        product.id,
+        { categoryId: product.categoryId, subcategoryId: product.subcategoryId },
+        placements,
+      );
+      return vis.subcategoryId === childId || vis.categoryId === childId;
+    });
+  }
+
+  function removeChildAndResetFilter(parentId: string, childId: string) {
     updateConfig({
       categories: removeStoreChild(config.categories, parentId, childId),
     });
     if (filter.kind === "sub" && filter.subcategoryId === childId) {
       setFilter({ kind: "category", categoryId: parentId });
+    }
+  }
+
+  function deleteCreatedChild(parentId: string, childId: string) {
+    const parent = config.categories.find((item) => item.id === parentId);
+    const child = parent?.children.find((item) => item.id === childId);
+    const inSub = productsInSubcategory(parentId, childId);
+    if (inSub.length > 0 && parent && child) {
+      setRelocateSub({
+        mode: "child",
+        parentId,
+        childId,
+        childName: child.name,
+        parentName: parent.name,
+        products: inSub.map((item) => ({ id: item.id, title: item.title })),
+        dest: `parent:${parentId}`,
+      });
+      return;
+    }
+    removeChildAndResetFilter(parentId, childId);
+  }
+
+  function resolveRelocateDest(dest: string) {
+    if (dest.startsWith("parent:")) {
+      const id = dest.slice(7);
+      const parent = config.categories.find((item) => item.id === id);
+      return { categoryId: id, subcategoryId: "", categoryName: parent?.name ?? id, label: parent?.name ?? id };
+    }
+    if (dest.startsWith("sub:")) {
+      const id = dest.slice(4);
+      const parent = config.categories.find((item) => item.children.some((child) => child.id === id));
+      const child = parent?.children.find((item) => item.id === id);
+      return {
+        categoryId: parent?.id ?? id,
+        subcategoryId: id,
+        categoryName: parent?.name ?? id,
+        label: parent && child ? `${parent.name} → ${child.name}` : (child?.name ?? id),
+      };
+    }
+    if (dest.startsWith("cat:")) {
+      const id = dest.slice(4);
+      const item = config.categories.find((entry) => entry.id === id);
+      return { categoryId: id, subcategoryId: "", categoryName: item?.name ?? id, label: item?.name ?? id };
+    }
+    return null;
+  }
+
+  async function confirmRelocateAndDelete() {
+    if (!relocateSub) return;
+    const next = resolveRelocateDest(relocateSub.dest);
+    if (!next) return;
+    setRelocating(true);
+    try {
+      for (const product of relocateSub.products) {
+        await updateProduct(product.id, {
+          category: next.categoryName,
+          categoryId: next.categoryId,
+          subcategoryId: next.subcategoryId,
+        });
+      }
+      if (relocateSub.mode === "top") {
+        updateConfig({ categories: removeStoreCategory(config.categories, relocateSub.childId) });
+        if (filter.kind !== "all" && filter.categoryId === relocateSub.childId) {
+          setFilter({ kind: "all" });
+        }
+      } else {
+        removeChildAndResetFilter(relocateSub.parentId, relocateSub.childId);
+      }
+      setRelocateSub(null);
+    } finally {
+      setRelocating(false);
     }
   }
 
@@ -796,7 +925,10 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                 event.preventDefault();
                 const dragged = readCategoryDrag(event);
                 if (!dragged) return;
-                if (dragged.level === "child") restoreTallerCategory(dragged.id);
+                if (dragged.level === "child") {
+                  promoteSubcategoryToMain(dragged.parentId, dragged.id);
+                  return;
+                }
                 if (dragged.level === "top") {
                   const first = config.categories[0];
                   if (first) {
@@ -806,9 +938,9 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                   }
                 }
               }}
-              className="rounded-xl border border-dashed border-red-200 bg-red-50/60 px-3 py-1.5 text-[11px] font-medium leading-snug text-red-700"
+              className="rounded-xl border border-dashed border-sky-300 bg-sky-50 px-3 py-1.5 text-[11px] font-medium leading-snug text-sky-800"
             >
-              Soltá acá para dejar la categoría de TallerGestio en la raíz
+              Soltá acá una subcategoría para dejarla como categoría principal
             </li>
           ) : null}
           {visibleCategories.map((item) => {
@@ -955,10 +1087,14 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                                     {child.name}
                                   </span>
                                 </button>
-                                {admin && !isTallerOrigin(child.origin) ? (
+                                {admin ? (
                                   <button
                                     type="button"
-                                    aria-label={`Eliminar ${child.name}`}
+                                    aria-label={
+                                      isTallerOrigin(child.origin)
+                                        ? `Sacar ${child.name} de ${item.name}`
+                                        : `Eliminar ${child.name}`
+                                    }
                                     onClick={() => deleteCreatedChild(item.id, child.id)}
                                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400"
                                   >
@@ -1281,6 +1417,91 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
           </div>
         </div>
       </main>
+      {admin && relocateSub ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !relocating) setRelocateSub(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="relocate-sub-title"
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+          >
+            <h2 id="relocate-sub-title" className="text-lg font-bold text-neutral-950">
+              Mover productos antes de borrar
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-neutral-700">
+              <span className="font-semibold text-neutral-950">{relocateSub.childName}</span> tiene{" "}
+              {relocateSub.products.length}{" "}
+              {relocateSub.products.length === 1 ? "producto" : "productos"}. Elegí a dónde van antes de eliminar{" "}
+              {relocateSub.mode === "top" ? "la categoría" : "la subcategoría"}.
+            </p>
+            <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-gray-100 bg-[#f7f8fa] px-3 py-2">
+              {relocateSub.products.map((item) => (
+                <li key={item.id} className="truncate text-sm font-medium text-neutral-800">
+                  {item.title}
+                </li>
+              ))}
+            </ul>
+            <label className="mt-4 block text-sm font-semibold text-neutral-900">
+              Mover a
+              <select
+                value={relocateSub.dest}
+                onChange={(event) => setRelocateSub({ ...relocateSub, dest: event.target.value })}
+                className="mt-1 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-neutral-950 outline-none focus:border-sky-500"
+              >
+                {relocateSub.mode === "child" ? (
+                  <option value={`parent:${relocateSub.parentId}`}>{relocateSub.parentName} (sin subcategoría)</option>
+                ) : null}
+                {relocateSub.mode === "child"
+                  ? config.categories
+                      .find((item) => item.id === relocateSub.parentId)
+                      ?.children.filter((child) => child.id !== relocateSub.childId)
+                      .map((child) => (
+                        <option key={child.id} value={`sub:${child.id}`}>
+                          {relocateSub.parentName} → {child.name}
+                        </option>
+                      ))
+                  : null}
+                {config.categories
+                  .filter(
+                    (item) =>
+                      item.id !== relocateSub.childId &&
+                      item.id !== relocateSub.parentId &&
+                      !isTallerOrigin(item.origin),
+                  )
+                  .map((item) => (
+                    <option key={item.id} value={`cat:${item.id}`}>
+                      {item.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={relocating}
+                onClick={() => setRelocateSub(null)}
+                className="rounded-full px-4 py-2.5 text-sm font-semibold text-neutral-800 hover:bg-neutral-100 disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={relocating}
+                onClick={() => void confirmRelocateAndDelete()}
+                className="rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400 disabled:opacity-60"
+              >
+                {relocating ? "Moviendo..." : "Mover y eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {admin && moveConfirm ? (
         <div
           className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 p-4 sm:items-center"

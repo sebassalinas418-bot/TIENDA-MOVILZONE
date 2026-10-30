@@ -53,6 +53,20 @@ export function isTallerOrigin(origin?: CategoryOrigin) {
   return origin === "taller"
 }
 
+export const BUILTIN_STORE_CATEGORY_IDS = new Set([
+  "celulares",
+  "fundas",
+  "cargadores",
+  "auriculares",
+  "protectores",
+  "soportes",
+  "accesorios",
+])
+
+export function isBuiltinStoreCategory(id: string) {
+  return BUILTIN_STORE_CATEGORY_IDS.has(id)
+}
+
 export function categorySignature(categories: StoreCategorySlice[]) {
   return JSON.stringify(
     categories.map((item) => ({
@@ -83,17 +97,12 @@ export function mergeStoreCategoryTrees(
   for (const item of secondary) {
     const existing = byId.get(item.id)
     if (!existing) {
-      if (isTallerOrigin(item.origin)) continue
+      if (isTallerOrigin(item.origin) || isBuiltinStoreCategory(item.id)) continue
       order.push(item.id)
       byId.set(item.id, { ...item, children: [...item.children] })
       continue
     }
-    const childIds = new Set(existing.children.map((child) => child.id))
-    for (const child of item.children) {
-      if (childIds.has(child.id) || isTallerOrigin(child.origin)) continue
-      existing.children.push(child)
-      childIds.add(child.id)
-    }
+    // No reinsertar hijos del otro árbol: si se borró "auto" en Cargadores, no tiene que volver.
   }
   return order
     .map((id) => byId.get(id))
@@ -104,13 +113,23 @@ export function collectCategoryFilterIds(item: StoreCategorySlice) {
   return [item.id, ...item.children.map((child) => child.id)]
 }
 
+function matchesTallerSlug(id: string, name: string, slug: string) {
+  return id === slug || slugTallerCategory(name) === slug
+}
+
+function inTallerInventory(id: string, name: string, usedSlugs: Set<string>) {
+  return usedSlugs.has(id) || usedSlugs.has(slugTallerCategory(name))
+}
+
 function findTallerNode(
   categories: StoreCategorySlice[],
   slug: string,
 ): { top?: StoreCategorySlice; child?: StoreCategoryChild; parent?: StoreCategorySlice } {
   for (const item of categories) {
-    if (item.id === slug) return { top: item }
-    const child = item.children.find((entry) => entry.id === slug)
+    if (matchesTallerSlug(item.id, item.name, slug)) return { top: item }
+    const child = item.children.find((entry) =>
+      matchesTallerSlug(entry.id, entry.name, slug),
+    )
     if (child) return { child, parent: item }
   }
   return {}
@@ -126,11 +145,14 @@ export function mergeTallerCategoriesIntoStore(
   const usedSlugs = new Set(names.map(slugTallerCategory))
   let next: StoreCategorySlice[] = current.map((item) => ({
     ...item,
-    origin: item.origin ?? (usedSlugs.has(item.id) ? "taller" : "store"),
+    origin: inTallerInventory(item.id, item.name, usedSlugs)
+      ? "taller"
+      : item.origin ?? "store",
     children: item.children.map((child) => ({
       ...child,
-      origin:
-        child.origin ?? (usedSlugs.has(child.id) ? "taller" : "store"),
+      origin: inTallerInventory(child.id, child.name, usedSlugs)
+        ? "taller"
+        : child.origin ?? "store",
     })),
   }))
 
@@ -139,7 +161,7 @@ export function mergeTallerCategoriesIntoStore(
     const found = findTallerNode(next, slug)
     if (found.top) {
       next = next.map((item) =>
-        item.id === slug ? { ...item, name, origin: "taller" } : item,
+        item.id === found.top?.id ? { ...item, origin: "taller" as const } : item,
       )
       continue
     }
@@ -149,8 +171,8 @@ export function mergeTallerCategoriesIntoStore(
           ? {
               ...item,
               children: item.children.map((child) =>
-                child.id === slug
-                  ? { ...child, name, origin: "taller" as const }
+                child.id === found.child?.id
+                  ? { ...child, origin: "taller" as const }
                   : child,
               ),
             }
@@ -171,12 +193,14 @@ export function mergeTallerCategoriesIntoStore(
     .map((item) => ({
       ...item,
       children: item.children.filter(
-        (child) => !isTallerOrigin(child.origin) || usedSlugs.has(child.id),
+        (child) =>
+          !isTallerOrigin(child.origin) ||
+          inTallerInventory(child.id, child.name, usedSlugs),
       ),
     }))
     .filter((item) => {
       if (!isTallerOrigin(item.origin)) return true
-      return usedSlugs.has(item.id)
+      return inTallerInventory(item.id, item.name, usedSlugs)
     })
 
   return next
@@ -256,15 +280,20 @@ export function removeStoreChild(
   parentId: string,
   childId: string,
 ) {
-  return categories.map((item) => {
-    if (item.id !== parentId) return item
-    const child = item.children.find((entry) => entry.id === childId)
-    if (!child || isTallerOrigin(child.origin)) return item
-    return {
-      ...item,
-      children: item.children.filter((entry) => entry.id !== childId),
-    }
-  })
+  const parent = categories.find((item) => item.id === parentId)
+  const child = parent?.children.find((entry) => entry.id === childId)
+  if (!child) return categories
+  if (isTallerOrigin(child.origin)) {
+    return unnestTallerCategory(categories, childId)
+  }
+  return categories.map((item) =>
+    item.id !== parentId
+      ? item
+      : {
+          ...item,
+          children: item.children.filter((entry) => entry.id !== childId),
+        },
+  )
 }
 
 export function reorderTopLevel(
@@ -305,6 +334,37 @@ export function reorderChildren(
     copy.splice(to, 0, child)
     return { ...item, children: copy }
   })
+}
+
+export function promoteChildToTopLevel(
+  categories: StoreCategorySlice[],
+  parentId: string,
+  childId: string,
+) {
+  const parent = categories.find((item) => item.id === parentId)
+  const child = parent?.children.find((entry) => entry.id === childId)
+  if (!child) return categories
+  const without = categories.map((item) =>
+    item.id !== parentId
+      ? item
+      : {
+          ...item,
+          children: item.children.filter((entry) => entry.id !== childId),
+        },
+  )
+  if (without.some((item) => item.id === child.id)) return without
+  const insertAt = without.findIndex((item) => item.id === parentId)
+  const next: StoreCategorySlice = {
+    id: child.id,
+    name: child.name,
+    image: child.image || defaultCategoryImage(child.id),
+    origin: child.origin ?? "store",
+    children: [],
+  }
+  if (insertAt < 0) return [...without, next]
+  const copy = [...without]
+  copy.splice(insertAt + 1, 0, next)
+  return copy
 }
 
 export function unnestTallerCategory(

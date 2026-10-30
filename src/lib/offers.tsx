@@ -505,7 +505,7 @@ export function CatalogProvider({
       const mergedCats = remoteCats.length
         ? localIsDefault
           ? remoteCats
-          : mergeStoreCategoryTrees(remoteCats, localCats)
+          : mergeStoreCategoryTrees(localCats, remoteCats)
         : localCats;
       if (categorySignature(mergedCats) !== categorySignature(localCats)) {
         updateConfig({ categories: mergedCats }, { persist: false });

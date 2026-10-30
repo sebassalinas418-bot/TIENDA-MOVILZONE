@@ -306,7 +306,7 @@ export function StoreConfigProvider({ children }: { children: ReactNode }) {
           categorySignature(current.categories) === categorySignature(defaultStoreConfig.categories);
         const categories = localIsDefault
           ? tree.categories
-          : mergeStoreCategoryTrees(tree.categories, current.categories);
+          : mergeStoreCategoryTrees(current.categories, tree.categories);
         if (categorySignature(categories) === categorySignature(current.categories)) return current;
         return { ...current, categories };
       });
