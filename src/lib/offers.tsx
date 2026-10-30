@@ -554,7 +554,7 @@ export function CatalogProvider({
           offers[product.id],
         ),
         storeHidden: Boolean(hidden[product.id]),
-        details: details[product.id] || product.details || undefined,
+        details: product.details?.trim() || details[product.id] || undefined,
         extraImages: extraImages[product.id] || product.extraImages || [],
       })),
     [details, extraImages, extras, hidden, images, offers, prices, remote],
