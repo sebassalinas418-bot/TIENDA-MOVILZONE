@@ -179,10 +179,7 @@ export const defaultStoreConfig: StoreConfig = {
       name: "Cargadores y Cables",
       image: "/categories/cables.jpg",
       origin: "store",
-      children: [
-        { id: "cables", name: "Cables", origin: "store" },
-        { id: "cargadores-rapidos", name: "Cargadores", origin: "store" },
-      ],
+      children: [],
     },
     {
       id: "auriculares",

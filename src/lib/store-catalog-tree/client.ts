@@ -58,7 +58,12 @@ export async function publishQueuedCatalogTree(): Promise<{ ok: boolean; error?:
 
 async function flushCatalogTree(options?: { force?: boolean }): Promise<{ ok: boolean; error?: string }> {
   if (holdPublish && !options?.force) return { ok: true };
-  if (writing) return { ok: true };
+  let wait = 0;
+  while (writing) {
+    if (wait > 80) return { ok: false, error: "No se pudieron publicar los cambios." };
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    wait += 1;
+  }
   if (!queued) return { ok: true };
   writing = true;
   let lastError: string | undefined;

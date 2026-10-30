@@ -154,13 +154,18 @@ async function writeFile(
 ) {
   const body = Buffer.from(JSON.stringify(tree));
   const path = objectPath(shop);
-  const tryUpload = (contentType: string) =>
-    client.storage.from(BUCKET).upload(path, body, { contentType, upsert: true });
-
-  let { error } = await tryUpload("image/jpeg");
+  const options = { upsert: true as const, cacheControl: "0" };
+  await client.storage.from(BUCKET).remove([path]);
+  await allowCatalogJson(client);
+  let { error } = await client.storage.from(BUCKET).upload(path, body, {
+    ...options,
+    contentType: "application/json",
+  });
   if (error) {
-    await allowCatalogJson(client);
-    ({ error } = await tryUpload("application/json"));
+    ({ error } = await client.storage.from(BUCKET).upload(path, body, {
+      ...options,
+      contentType: "image/jpeg",
+    }));
   }
   return error;
 }
@@ -211,7 +216,8 @@ export async function writeStoreCatalogTree(patch: {
   if (!client) {
     return { ok: false, error: "Falta conexión para guardar el catálogo." };
   }
-  const shop = await resolveWriteShop(client);
+  const shops = await candidateShopIds(client);
+  const shop = (await resolveWriteShop(client)) || shops[0] || "";
   if (!shop) {
     return { ok: false, error: "Falta conexión para guardar el catálogo." };
   }
@@ -221,7 +227,12 @@ export async function writeStoreCatalogTree(patch: {
     categories: patch.categories !== undefined ? incoming.categories : current.categories,
     placements: patch.placements !== undefined ? incoming.placements : current.placements,
   };
-  const error = await writeFile(client, shop, tree);
-  if (error) return { ok: false, error: error.message };
+  let lastError: { message: string } | null = null;
+  const targets = shops.length ? shops : [shop];
+  for (const id of targets) {
+    const error = await writeFile(client, id, tree);
+    if (error) lastError = error;
+  }
+  if (lastError) return { ok: false, error: lastError.message };
   return { ok: true, tree };
 }
