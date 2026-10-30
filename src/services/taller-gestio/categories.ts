@@ -146,11 +146,28 @@ function isCargadoresNode(id: string, name: string) {
   return id === "cargadores" || slug === "cargadores"
 }
 
+function mergeCablesNode(current: StoreCategorySlice | undefined, next: StoreCategorySlice) {
+  if (!current) return next
+  const extras = next.children.filter((child) => !current.children.some((entry) => entry.id === child.id))
+  return {
+    ...current,
+    ...next,
+    children: [...current.children, ...extras],
+  }
+}
+
 /** Cables queda categoría principal, nunca hija de Cargadores, y arriba de Cargadores. */
 export function detachCablesAsTopLevel(categories: StoreCategorySlice[]) {
   let cables: StoreCategorySlice | undefined
   const rest: StoreCategorySlice[] = []
   for (const item of categories) {
+    if (isCablesNode(item.id, item.name)) {
+      cables = mergeCablesNode(cables, {
+        ...item,
+        children: item.children.filter((child) => !isCablesNode(child.id, child.name)),
+      })
+      continue
+    }
     const nested = item.children.find((child) => isCablesNode(child.id, child.name))
     if (nested && !cables) {
       cables = {
@@ -160,15 +177,6 @@ export function detachCablesAsTopLevel(categories: StoreCategorySlice[]) {
         origin: nested.origin ?? item.origin ?? "taller",
         children: [],
       }
-    }
-    if (isCablesNode(item.id, item.name)) {
-      if (!cables) {
-        cables = {
-          ...item,
-          children: item.children.filter((child) => !isCablesNode(child.id, child.name)),
-        }
-      }
-      continue
     }
     rest.push({
       ...item,
@@ -201,6 +209,24 @@ export function stripCargadoresLeftoverChildren(categories: StoreCategorySlice[]
       ...item,
       children: item.children.filter((child) => !isCargadoresLeftoverChild(child.id, child.name)),
     }
+  })
+}
+
+/** Un PUT viejo no puede borrar subs de tienda que ya están guardadas. */
+export function keepExistingStoreChildren(
+  current: StoreCategorySlice[],
+  incoming: StoreCategorySlice[],
+) {
+  return incoming.map((item) => {
+    const previous = current.find((entry) => entry.id === item.id)
+    if (!previous) return item
+    const extras = previous.children.filter(
+      (child) =>
+        !isTallerOrigin(child.origin) &&
+        !item.children.some((entry) => entry.id === child.id),
+    )
+    if (!extras.length) return item
+    return { ...item, children: [...item.children, ...extras] }
   })
 }
 

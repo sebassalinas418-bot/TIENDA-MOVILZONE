@@ -63,10 +63,13 @@ export async function DELETE(request: Request) {
   }
   const current = await readStoreCatalogTree();
   const categories = removeStoreChild(current.categories, parentId, childId);
-  const result = await writeStoreCatalogTree({
-    categories,
-    placements: current.placements,
-  });
+  const result = await writeStoreCatalogTree(
+    {
+      categories,
+      placements: current.placements,
+    },
+    { replace: true },
+  );
   if (!result.ok) {
     return Response.json({ ok: false, error: result.error }, { status: 503, headers: noStore });
   }
@@ -92,10 +95,13 @@ export async function PATCH(request: Request) {
   }
   const current = await readStoreCatalogTree();
   if (body.action === "replace" && body.categories !== undefined) {
-    const result = await writeStoreCatalogTree({
-      categories: body.categories,
-      placements: current.placements,
-    });
+    const result = await writeStoreCatalogTree(
+      {
+        categories: body.categories,
+        placements: current.placements,
+      },
+      { replace: true },
+    );
     if (!result.ok) {
       return Response.json({ ok: false, error: result.error }, { status: 503, headers: noStore });
     }
@@ -112,7 +118,7 @@ export async function PATCH(request: Request) {
   }
   const categories = promoteChildToTopLevel(current.categories, parentId, childId);
   const placements = remapPlacementsAfterPromote(current.placements, childId);
-  const result = await writeStoreCatalogTree({ categories, placements });
+  const result = await writeStoreCatalogTree({ categories, placements }, { replace: true });
   if (!result.ok) {
     return Response.json({ ok: false, error: result.error }, { status: 503, headers: noStore });
   }

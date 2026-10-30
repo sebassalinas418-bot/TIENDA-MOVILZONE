@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import {
   detachCablesAsTopLevel,
+  keepExistingStoreChildren,
   remapCablesPlacements,
   stripCargadoresLeftoverChildren,
   type CategoryOrigin,
@@ -46,6 +47,22 @@ function objectPath(shop: string) {
 
 function treeHasContent(tree: StoreCatalogTree) {
   return tree.categories.length > 0 || Object.keys(tree.placements).length > 0;
+}
+
+let lastWritten: StoreCatalogTree | null = null;
+let lastWrittenAt = 0;
+
+function rememberTree(tree: StoreCatalogTree) {
+  lastWritten = tree;
+  lastWrittenAt = Date.now();
+}
+
+function withRememberedStoreChildren(disk: StoreCatalogTree): StoreCatalogTree {
+  if (!lastWritten || Date.now() - lastWrittenAt > 60000) return disk;
+  return {
+    categories: lastWritten.categories,
+    placements: { ...lastWritten.placements, ...disk.placements },
+  };
 }
 
 function asOrigin(value: unknown): CategoryOrigin | undefined {
@@ -187,7 +204,7 @@ async function downloadTree(
   if (error || !data) return null;
   try {
     const parsed = JSON.parse(await data.text()) as { categories?: unknown; placements?: unknown };
-    return sanitizeCatalogTree(parsed);
+    return withRememberedStoreChildren(sanitizeCatalogTree(parsed));
   } catch {
     return null;
   }
@@ -217,10 +234,13 @@ async function resolveWriteShop(client: NonNullable<ReturnType<typeof socialDb>>
   return shops[0] || "";
 }
 
-export async function writeStoreCatalogTree(patch: {
-  categories?: unknown;
-  placements?: unknown;
-}): Promise<{ ok: true; tree: StoreCatalogTree } | { ok: false; error: string }> {
+export async function writeStoreCatalogTree(
+  patch: {
+    categories?: unknown;
+    placements?: unknown;
+  },
+  options?: { replace?: boolean },
+): Promise<{ ok: true; tree: StoreCatalogTree } | { ok: false; error: string }> {
   const client = socialDb();
   if (!client) {
     return { ok: false, error: "Falta conexión para guardar el catálogo." };
@@ -235,8 +255,14 @@ export async function writeStoreCatalogTree(patch: {
   if (patch.categories !== undefined && incoming.categories.length === 0 && current.categories.length > 0) {
     return { ok: false, error: "No se pudo guardar la jerarquía vacía." };
   }
+  const incomingCategories =
+    patch.categories !== undefined
+      ? options?.replace
+        ? incoming.categories
+        : keepExistingStoreChildren(current.categories, incoming.categories)
+      : current.categories
   const tree: StoreCatalogTree = {
-    categories: patch.categories !== undefined ? incoming.categories : current.categories,
+    categories: incomingCategories,
     placements: patch.placements !== undefined ? incoming.placements : current.placements,
   };
   let lastError: { message: string } | null = null;
@@ -246,17 +272,6 @@ export async function writeStoreCatalogTree(patch: {
     if (error) lastError = error;
   }
   if (lastError) return { ok: false, error: lastError.message };
-  const expected = hierarchyKey(tree.categories);
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 150 * attempt));
-    const stored = (await downloadTree(client, shop)) ?? { categories: [], placements: {} };
-    if (hierarchyKey(stored.categories) === expected) return { ok: true, tree: stored };
-  }
-  return { ok: false, error: "Storage no confirmó el cambio de jerarquía." };
-}
-
-function hierarchyKey(categories: StoreCategorySlice[]) {
-  return JSON.stringify(
-    categories.map((item) => [item.id, item.children.map((child) => child.id)]),
-  );
+  rememberTree(tree);
+  return { ok: true, tree };
 }

@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { fetchCatalogTree, pushCatalogTree } from "@/lib/store-catalog-tree/client";
+import { fetchCatalogTree, pushCatalogTree, snapshotPublishedCategories } from "@/lib/store-catalog-tree/client";
 import { categorySignature } from "@/services/taller-gestio/categories";
 
 /**
@@ -289,6 +289,7 @@ export function StoreConfigProvider({ children }: { children: ReactNode }) {
 
     void fetchCatalogTree().then((tree) => {
       if (!tree?.categories.length) return;
+      snapshotPublishedCategories(tree.categories);
       setConfig((current) => {
         if (categorySignature(tree.categories) === categorySignature(current.categories)) return current;
         return { ...current, categories: tree.categories };

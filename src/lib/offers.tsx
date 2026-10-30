@@ -22,6 +22,7 @@ import {
   fetchCatalogTree,
   markAdminCatalogDirty,
   pushCatalogTree,
+  snapshotPublishedCategories,
 } from "@/lib/store-catalog-tree/client";
 import {
   loadProductPlacements,
@@ -522,6 +523,7 @@ export function CatalogProvider({
         ? alignStoreMenuToTallerInventory(remoteCats, liveNames)
         : remoteCats;
       if (nextCats.length && categorySignature(nextCats) !== categorySignature(localCats)) {
+        snapshotPublishedCategories(nextCats);
         updateConfig({ categories: nextCats }, { persist: false });
       }
 
@@ -551,6 +553,7 @@ export function CatalogProvider({
 
   useEffect(() => {
     if (!remote?.length) return;
+    if (catalogTreeIsPending()) return;
     const liveNames = [
       ...new Set([...liveCategoryNamesRef.current, ...remote.map((product) => product.category)]),
     ].filter((name) => name.trim());

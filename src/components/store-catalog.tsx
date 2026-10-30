@@ -26,7 +26,11 @@ import { useAdminCatalogPublish } from "@/lib/admin-catalog-publish";
 import { useAdminAccess } from "@/lib/admin-access";
 import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
 import { storeSearchPath } from "@/lib/store-search-path";
-import { deletePublishedSubcategory, persistPublishedCatalogTree } from "@/lib/store-catalog-tree/client";
+import {
+  deletePublishedSubcategory,
+  markCatalogTreeDirty,
+  persistPublishedCatalogTree,
+} from "@/lib/store-catalog-tree/client";
 import {
   collectCategoryFilterIds,
   isTallerOrigin,
@@ -40,6 +44,11 @@ import {
 } from "@/services/taller-gestio/categories";
 
 const CAT_DRAG = "text/plain";
+const categoryIdle = "text-neutral-900 hover:bg-sky-100 hover:text-sky-700";
+const categoryActive = "bg-sky-700 font-bold text-white shadow-[inset_4px_0_0_#7dd3fc] hover:bg-sky-800";
+const categoryBranch = "bg-sky-100 font-bold text-sky-800 shadow-[inset_4px_0_0_#0284c7]";
+const storeSubIdle = "bg-black text-white hover:bg-neutral-800";
+const storeSubActive = "bg-black font-bold text-white ring-1 ring-white/70";
 
 type CategoryDrag =
   | { level: "top"; id: string }
@@ -208,14 +217,6 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   const [subDraft, setSubDraft] = useState<{ categoryId: string; name: string } | null>(null);
   const [coverEdit, setCoverEdit] = useState<{ categoryId: string; subcategoryId: string } | null>(null);
   const [imageEditId, setImageEditId] = useState<string | null>(null);
-  const [moveConfirm, setMoveConfirm] = useState<{
-    productId: string;
-    title: string;
-    categoryId: string;
-    subcategoryId: string;
-    categoryName: string;
-    label: string;
-  } | null>(null);
   const [relocateSub, setRelocateSub] = useState<{
     mode: "child" | "top";
     parentId: string;
@@ -464,6 +465,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     updateConfig({ categories: next }, { persist: false });
     setExpanded((current) => (current.includes(categoryId) ? current : [...current, categoryId]));
     setSubDraft(null);
+    markCatalogTreeDirty();
     void persistHierarchy(previous, next);
   }
 
@@ -474,7 +476,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     setExpanded((current) =>
       current.includes(storeParentId) ? current : [...current, storeParentId],
     );
-    void persistHierarchy(previous, next);
+    markCatalogTreeDirty();
   }
 
   function promoteSubcategoryToMain(parentId: string, childId: string) {
@@ -493,7 +495,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       });
     }
     setFilter({ kind: "category", categoryId: child.id });
-    void persistHierarchy(previous, next, remapPlacementsAfterPromote(placements, childId));
+    markCatalogTreeDirty();
   }
 
   async function persistHierarchy(
@@ -592,20 +594,12 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     const parent = config.categories.find((item) => item.id === parentId);
     const child = parent?.children.find((item) => item.id === childId);
     if (!parent || !child) return;
-    if (isTallerOrigin(child.origin)) {
-      return removeChildAndResetFilter(parentId, childId);
+    if (!isTallerOrigin(child.origin)) {
+      for (const product of productsInSubcategory(parentId, childId)) {
+        placeProduct(product.id, parentId);
+      }
     }
-    const previous = config.categories;
-    const next = removeStoreChild(previous, parentId, childId);
-    const nextPlacements = remapPlacementsToParent(placements, parentId, childId);
-    for (const product of productsInSubcategory(parentId, childId)) {
-      placeProduct(product.id, parentId);
-    }
-    updateConfig({ categories: next }, { persist: false });
-    if (filter.kind === "sub" && filter.subcategoryId === childId) {
-      setFilter({ kind: "category", categoryId: parentId });
-    }
-    void persistHierarchy(previous, next, nextPlacements);
+    return removeChildAndResetFilter(parentId, childId);
   }
 
   function resolveRelocateDest(dest: string) {
@@ -664,7 +658,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     event.preventDefault();
     const productId = readProductDrag(event);
     if (productId) {
-      assignProductToStoreCategory(productId, target);
+      void assignProductToStoreCategory(productId, target);
       return;
     }
     const dragged = readCategoryDrag(event);
@@ -680,14 +674,14 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       const previous = config.categories;
       const next = reorderTopLevel(previous, dragged.id, target.id);
       updateConfig({ categories: next }, { persist: false });
-      void persistHierarchy(previous, next);
+      markCatalogTreeDirty();
       return;
     }
     if (dragged.level === "child" && target.level === "child" && dragged.parentId === target.parentId) {
       const previous = config.categories;
       const next = reorderChildren(previous, dragged.parentId, dragged.id, target.id);
       updateConfig({ categories: next }, { persist: false });
-      void persistHierarchy(previous, next);
+      markCatalogTreeDirty();
       return;
     }
     if (dragged.level === "child" && target.level === "top") {
@@ -702,41 +696,34 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     }
   }
 
-  function assignProductToStoreCategory(productId: string, target: CategoryDrag) {
-    const product = products.find((item) => item.id === productId);
-    if (target.level === "top") {
-      const item = config.categories.find((entry) => entry.id === target.id);
-      setMoveConfirm({
-        productId,
-        title: product?.title ?? "este producto",
-        categoryId: target.id,
-        subcategoryId: "",
-        categoryName: item?.name ?? target.id,
-        label: item?.name ?? target.id,
-      });
-      return;
-    }
-    const parent = config.categories.find((entry) => entry.id === target.parentId);
-    const child = parent?.children.find((entry) => entry.id === target.id);
-    setMoveConfirm({
-      productId,
-      title: product?.title ?? "este producto",
-      categoryId: target.parentId,
-      subcategoryId: target.id,
-      categoryName: parent?.name ?? target.parentId,
-      label: parent && child ? `${parent.name} → ${child.name}` : (child?.name ?? parent?.name ?? target.id),
-    });
-  }
-
-  async function confirmProductCategoryMove() {
-    if (!moveConfirm) return;
-    const next = moveConfirm;
-    setMoveConfirm(null);
-    await updateProduct(next.productId, {
+  async function assignProductToStoreCategory(productId: string, target: CategoryDrag) {
+    const next =
+      target.level === "top"
+        ? {
+            categoryId: target.id,
+            subcategoryId: "",
+            categoryName: config.categories.find((entry) => entry.id === target.id)?.name ?? target.id,
+          }
+        : {
+            categoryId: target.parentId,
+            subcategoryId: target.id,
+            categoryName:
+              config.categories.find((entry) => entry.id === target.parentId)?.name ?? target.parentId,
+          };
+    const nextPlacements = {
+      ...placements,
+      [productId]: {
+        categoryId: next.categoryId,
+        subcategoryId: next.subcategoryId || undefined,
+      },
+    };
+    await updateProduct(productId, {
       category: next.categoryName,
       categoryId: next.categoryId,
       subcategoryId: next.subcategoryId,
     });
+    await persistPublishedCatalogTree(config.categories, nextPlacements);
+    router.refresh();
     if (next.subcategoryId) {
       setFilter({ kind: "sub", categoryId: next.categoryId, subcategoryId: next.subcategoryId });
       setExpanded((current) =>
@@ -983,7 +970,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                     const previous = config.categories;
                     const next = reorderTopLevel(previous, dragged.id, first.id);
                     updateConfig({ categories: next }, { persist: false });
-                    void persistHierarchy(previous, next);
+                    markCatalogTreeDirty();
                   }
                 }
               }}
@@ -1291,7 +1278,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                   event.preventDefault();
                   const productId = readProductDrag(event);
                   if (productId) {
-                    assignProductToStoreCategory(productId, { level: "top", id: activeCategory.id });
+                    void assignProductToStoreCategory(productId, { level: "top", id: activeCategory.id });
                   }
                 }}
               >
@@ -1338,7 +1325,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                           event.stopPropagation();
                           const productId = readProductDrag(event);
                           if (productId) {
-                            assignProductToStoreCategory(productId, {
+                            void assignProductToStoreCategory(productId, {
                               level: "child",
                               id: child.id,
                               parentId: activeCategory.id,
@@ -1568,49 +1555,6 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
           </div>
         </div>
       ) : null}
-      {admin && moveConfirm ? (
-        <div
-          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 p-4 sm:items-center"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setMoveConfirm(null);
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="move-category-title"
-            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
-          >
-            <h2 id="move-category-title" className="text-lg font-bold text-neutral-950">
-              Cambiar categoría
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-neutral-700">
-              ¿Pasar <span className="font-semibold text-neutral-950">{moveConfirm.title}</span> a{" "}
-              <span className="font-semibold text-neutral-950">{moveConfirm.label}</span>?
-            </p>
-            <p className="mt-2 text-xs font-medium text-neutral-500">
-              Si confirmás, el producto queda en esa categoría también al editarlo.
-            </p>
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setMoveConfirm(null)}
-                className="rounded-full px-4 py-2.5 text-sm font-semibold text-neutral-800 hover:bg-neutral-100"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => void confirmProductCategoryMove()}
-                className="rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400"
-              >
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
       {canManage && editing ? (
         <ProductEditModal
           product={editing}
@@ -1706,12 +1650,6 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     </div>
   );
 }
-
-const categoryIdle = "text-neutral-900 hover:bg-sky-100 hover:text-sky-700";
-const categoryActive = "bg-sky-700 font-bold text-white shadow-[inset_4px_0_0_#7dd3fc] hover:bg-sky-800";
-const categoryBranch = "bg-sky-100 font-bold text-sky-800 shadow-[inset_4px_0_0_#0284c7]";
-const storeSubIdle = "bg-black text-white hover:bg-neutral-800";
-const storeSubActive = "bg-black font-bold text-white ring-1 ring-white/70";
 
 function TrashIcon() {
   return (

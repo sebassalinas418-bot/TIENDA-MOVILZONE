@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { useCatalog } from "@/lib/offers";
 import { useStoreConfig } from "@/config/store-config";
 import {
-  catalogTreeIsPending,
+  catalogTreeHasUnsavedChanges,
   persistPublishedCatalogTree,
   setCatalogTreePublishHold,
   subscribeCatalogTreeQueue,
@@ -41,6 +41,7 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [onAdmin, setOnAdmin] = useState(false);
   const leaveNext = useRef<(() => void) | null>(null);
   const configRef = useRef(config.categories);
   const placementsRef = useRef(placements);
@@ -49,14 +50,22 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
 
   useEffect(() => {
     if (!window.location.pathname.startsWith("/admin")) return;
+    setOnAdmin(true);
     setCatalogTreePublishHold(true);
-    setPending(catalogTreeIsPending());
-    const stop = subscribeCatalogTreeQueue(() => setPending(catalogTreeIsPending()));
+    const syncPending = () => {
+      queueMicrotask(() => setPending(catalogTreeHasUnsavedChanges(configRef.current)));
+    };
+    syncPending();
+    const stop = subscribeCatalogTreeQueue(syncPending);
     return () => {
       stop();
-      if (!catalogTreeIsPending()) setCatalogTreePublishHold(false);
+      setCatalogTreePublishHold(false);
     };
   }, []);
+
+  useEffect(() => {
+    setPending(catalogTreeHasUnsavedChanges(config.categories));
+  }, [config.categories]);
 
   useEffect(() => {
     if (!pending) return;
@@ -74,10 +83,12 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
     try {
       await persistPublishedCatalogTree(configRef.current, placementsRef.current);
       router.refresh();
+      setPending(false);
       setLeaveOpen(false);
       return true;
     } catch (error) {
       setError(error instanceof Error ? error.message : "No se pudieron publicar los cambios.");
+      setPending(true);
       return false;
     } finally {
       setPublishing(false);
@@ -85,7 +96,7 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
   }, [router]);
 
   const requestLeave = useCallback((next: () => void) => {
-    if (!catalogTreeIsPending()) {
+    if (!catalogTreeHasUnsavedChanges(configRef.current)) {
       next();
       return;
     }
@@ -104,25 +115,22 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
   return (
     <AdminCatalogPublishContext.Provider value={{ pending, publishing, error, publish, requestLeave }}>
       {children}
-      {pending ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] z-[70] flex justify-center px-3">
-          <div className="pointer-events-auto flex w-full max-w-lg items-center gap-3 rounded-2xl border border-sky-200 bg-white px-4 py-3 shadow-xl shadow-sky-900/10">
-            <p className="min-w-0 flex-1 text-sm font-semibold text-neutral-900">
-              Hay cambios de categorías. Confirmá para verlos en el celular.
-            </p>
-            <button
-              type="button"
-              disabled={publishing}
-              onClick={() => void publish()}
-              className="shrink-0 rounded-full bg-sky-500 px-4 py-2 text-sm font-bold text-white hover:bg-sky-400 disabled:opacity-60"
-            >
-              {publishing ? "Publicando..." : "Confirmar cambios"}
-            </button>
-          </div>
-        </div>
+      {onAdmin ? (
+        <button
+          type="button"
+          disabled={!pending || publishing}
+          onClick={() => void publish()}
+          className={`fixed right-6 bottom-6 z-[70] rounded-full px-5 py-3 text-sm font-bold shadow-lg transition ${
+            pending
+              ? "bg-green-600 text-white hover:bg-green-500"
+              : "cursor-not-allowed bg-neutral-300 text-neutral-600"
+          }`}
+        >
+          {publishing ? "Guardando..." : pending ? "🟢 Guardar Cambios Pendientes" : "Guardado"}
+        </button>
       ) : null}
       {error && !leaveOpen ? (
-        <p className="fixed bottom-[5.5rem] left-1/2 z-[70] w-[min(100%-1.5rem,32rem)] -translate-x-1/2 rounded-xl bg-red-50 px-3 py-2 text-center text-sm font-semibold text-red-700">
+        <p className="fixed right-6 bottom-[5.5rem] z-[70] w-[min(100%-3rem,20rem)] rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
           {error}
         </p>
       ) : null}
@@ -138,7 +146,7 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
               Publicar cambios
             </h2>
             <p className="mt-2 text-sm leading-6 text-neutral-700">
-              Moviste categorías o productos. Confirmá para que se vean en el celular y en otras PCs antes de salir de Tienda.
+              Hay cambios de categorías sin guardar. Guardalos para que se vean en el celular antes de salir.
             </p>
             {error ? <p className="mt-3 text-sm font-semibold text-red-700">{error}</p> : null}
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -157,9 +165,9 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
                 type="button"
                 disabled={publishing}
                 onClick={() => void confirmAndLeave()}
-                className="rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400 disabled:opacity-60"
+                className="rounded-full bg-green-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-green-500 disabled:opacity-60"
               >
-                {publishing ? "Publicando..." : "Confirmar y continuar"}
+                {publishing ? "Guardando..." : "Guardar y continuar"}
               </button>
             </div>
           </div>

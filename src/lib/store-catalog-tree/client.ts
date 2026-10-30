@@ -22,10 +22,17 @@ let writing = false;
 let holdPublish = false;
 let extraDirty = false;
 let skipPullUntil = 0;
+let publishedSignature = "";
 const listeners = new Set<() => void>();
 
+function normalizedHierarchy(categories: StoreCategorySlice[]) {
+  return hierarchySignature(stripCargadoresLeftoverChildren(detachCablesAsTopLevel(categories)));
+}
+
 function notifyQueue() {
-  for (const listener of listeners) listener();
+  for (const listener of listeners) {
+    queueMicrotask(() => listener());
+  }
 }
 
 export function subscribeCatalogTreeQueue(listener: () => void) {
@@ -39,6 +46,23 @@ export function catalogTreeIsPending() {
 
 export function catalogTreeWroteRecently() {
   return Date.now() < skipPullUntil;
+}
+
+export function snapshotPublishedCategories(categories: StoreCategorySlice[]) {
+  publishedSignature = normalizedHierarchy(categories);
+  extraDirty = false;
+  notifyQueue();
+}
+
+export function catalogTreeHasUnsavedChanges(categories: StoreCategorySlice[]) {
+  if (queued !== null || extraDirty) return true;
+  if (!publishedSignature) return false;
+  return normalizedHierarchy(categories) !== publishedSignature;
+}
+
+export function markCatalogTreeDirty() {
+  extraDirty = true;
+  notifyQueue();
 }
 
 export function markAdminCatalogDirty() {
@@ -84,21 +108,9 @@ export async function persistPublishedCatalogTree(
     notifyQueue();
     throw new Error(result.error || "No se pudo guardar la jerarquía.");
   }
-  let confirmed: StoreCategorySlice[] | undefined;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
-    const remote = await fetchCatalogTree();
-    if (remote && hierarchySignature(remote.categories) === hierarchySignature(nextCategories)) {
-      confirmed = remote.categories;
-      break;
-    }
-  }
-  if (!confirmed) {
-    extraDirty = true;
-    notifyQueue();
-    throw new Error("Storage no confirmó el cambio de jerarquía.");
-  }
+  const confirmed = result.categories?.length ? result.categories : nextCategories;
   extraDirty = false;
+  snapshotPublishedCategories(confirmed);
   syncQueuedCategories(confirmed);
   notifyQueue();
   return { ok: true as const, categories: confirmed };
@@ -159,7 +171,11 @@ export async function publishQueuedCatalogTree(): Promise<{ ok: boolean; error?:
   return result;
 }
 
-async function flushCatalogTree(options?: { force?: boolean }): Promise<{ ok: boolean; error?: string }> {
+async function flushCatalogTree(options?: { force?: boolean }): Promise<{
+  ok: boolean;
+  error?: string;
+  categories?: StoreCategorySlice[];
+}> {
   if (holdPublish && !options?.force) return { ok: true };
   let wait = 0;
   while (writing) {
@@ -170,6 +186,7 @@ async function flushCatalogTree(options?: { force?: boolean }): Promise<{ ok: bo
   if (!queued) return { ok: true };
   writing = true;
   let lastError: string | undefined;
+  let saved: StoreCategorySlice[] | undefined;
   try {
     while (queued) {
       const body = queued;
@@ -182,11 +199,18 @@ async function flushCatalogTree(options?: { force?: boolean }): Promise<{ ok: bo
           cache: "no-store",
           body: JSON.stringify(body),
         });
-        if (!response.ok) {
+        let payload: { ok?: boolean; error?: string; categories?: StoreCategorySlice[] } = {};
+        try {
+          payload = (await response.json()) as typeof payload;
+        } catch {
+          payload = {};
+        }
+        if (!response.ok || payload.ok === false) {
           restoreQueued(body);
-          lastError = "No se pudieron publicar los cambios.";
+          lastError = payload.error || "No se pudieron publicar los cambios.";
           break;
         }
+        if (Array.isArray(payload.categories)) saved = payload.categories;
       } catch {
         restoreQueued(body);
         lastError = "No se pudieron publicar los cambios.";
@@ -198,7 +222,7 @@ async function flushCatalogTree(options?: { force?: boolean }): Promise<{ ok: bo
     notifyQueue();
     if (queued && !lastError && !holdPublish) void flushCatalogTree();
   }
-  return lastError ? { ok: false, error: lastError } : { ok: true };
+  return lastError ? { ok: false, error: lastError } : { ok: true, categories: saved };
 }
 
 export async function fetchCatalogTree(): Promise<{
