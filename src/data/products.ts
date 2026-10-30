@@ -159,8 +159,6 @@ export const shopCategories = [
   { id: "Fundas y Carcasas", label: "Fundas y Carcasas", image: "/categories/fundas.jpg" },
   { id: "Cargadores y Cables", label: "Cargadores y Cables", image: "/categories/cables.jpg" },
   { id: "Auriculares", label: "Auriculares", image: "/categories/audio.jpg" },
-  { id: "Protectores de Pantalla", label: "Protectores de Pantalla", image: "/categories/protectores.jpg" },
-  { id: "Soportes y Trípodes", label: "Soportes y Trípodes", image: "/categories/accesorios.jpg" },
   { id: "Accesorios", label: "Accesorios", image: "/categories/cargadores.jpg" },
 ];
 

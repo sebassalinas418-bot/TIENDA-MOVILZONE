@@ -195,20 +195,6 @@ export const defaultStoreConfig: StoreConfig = {
       children: [{ id: "inalambricos", name: "Inalámbricos", origin: "store" }],
     },
     {
-      id: "protectores",
-      name: "Protectores de Pantalla",
-      image: "/categories/protectores.jpg",
-      origin: "store",
-      children: [{ id: "vidrios", name: "Vidrios templados", origin: "store" }],
-    },
-    {
-      id: "soportes",
-      name: "Soportes y Trípodes",
-      image: "/categories/accesorios.jpg",
-      origin: "store",
-      children: [{ id: "soportes-auto", name: "Para el auto", origin: "store" }],
-    },
-    {
       id: "accesorios",
       name: "Accesorios",
       image: "/categories/cargadores.jpg",
