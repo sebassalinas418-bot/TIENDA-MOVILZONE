@@ -12,7 +12,7 @@ export function isPersistableProductImage(value?: string | null) {
   }
 }
 
-export function isSharedProductImage(value?: string | null) {
+export function isSharedProductImage(value?: string | null): value is string {
   const src = value?.trim() ?? "";
   if (!isPersistableProductImage(src)) return false;
   if (src.startsWith("/")) return false;
