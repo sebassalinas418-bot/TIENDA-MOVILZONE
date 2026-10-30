@@ -186,6 +186,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     updateProduct,
     addProduct,
     placements,
+    placeProduct,
     clearProductPlacement,
     toggleProductHidden,
   } = useCatalog();
@@ -454,15 +455,16 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   function addSubcategory(categoryId: string) {
     const name = subDraft?.categoryId === categoryId ? subDraft.name.trim() : "";
     if (!name) return;
-    updateConfig({
-      categories: config.categories.map((item) =>
-        item.id === categoryId
-          ? { ...item, children: [...item.children, { id: slugId(name), name, origin: "store" as const }] }
-          : item,
-      ),
-    });
+    const previous = config.categories;
+    const next = previous.map((item) =>
+      item.id === categoryId
+        ? { ...item, children: [...item.children, { id: slugId(name), name, origin: "store" as const }] }
+        : item,
+    );
+    updateConfig({ categories: next }, { persist: false });
     setExpanded((current) => (current.includes(categoryId) ? current : [...current, categoryId]));
     setSubDraft(null);
+    void persistHierarchy(previous, next);
   }
 
   function nestIntoStoreCategory(tallerId: string, storeParentId: string) {
@@ -572,23 +574,38 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     }
   }
 
+  function remapPlacementsToParent(
+    current: typeof placements,
+    parentId: string,
+    childId: string,
+  ) {
+    const next = { ...current };
+    for (const [id, placed] of Object.entries(next)) {
+      if (placed.subcategoryId === childId || placed.categoryId === childId) {
+        next[id] = { categoryId: parentId };
+      }
+    }
+    return next;
+  }
+
   function deleteCreatedChild(parentId: string, childId: string) {
     const parent = config.categories.find((item) => item.id === parentId);
     const child = parent?.children.find((item) => item.id === childId);
-    const inSub = productsInSubcategory(parentId, childId);
-    if (inSub.length > 0 && parent && child) {
-      setRelocateSub({
-        mode: "child",
-        parentId,
-        childId,
-        childName: child.name,
-        parentName: parent.name,
-        products: inSub.map((item) => ({ id: item.id, title: item.title })),
-        dest: `parent:${parentId}`,
-      });
-      return;
+    if (!parent || !child) return;
+    if (isTallerOrigin(child.origin)) {
+      return removeChildAndResetFilter(parentId, childId);
     }
-    return removeChildAndResetFilter(parentId, childId);
+    const previous = config.categories;
+    const next = removeStoreChild(previous, parentId, childId);
+    const nextPlacements = remapPlacementsToParent(placements, parentId, childId);
+    for (const product of productsInSubcategory(parentId, childId)) {
+      placeProduct(product.id, parentId);
+    }
+    updateConfig({ categories: next }, { persist: false });
+    if (filter.kind === "sub" && filter.subcategoryId === childId) {
+      setFilter({ kind: "category", categoryId: parentId });
+    }
+    void persistHierarchy(previous, next, nextPlacements);
   }
 
   function resolveRelocateDest(dest: string) {
@@ -1112,21 +1129,38 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                                     setFiltersOpen(false);
                                   }}
                                   className={`flex min-w-0 flex-1 items-center rounded-xl px-3 py-1.5 text-left text-sm font-semibold transition-colors duration-200 ${
-                                    childSelected ? categoryActive : categoryIdle
+                                    isTallerOrigin(child.origin)
+                                      ? childSelected
+                                        ? categoryActive
+                                        : categoryIdle
+                                      : childSelected
+                                        ? storeSubActive
+                                        : storeSubIdle
                                   }`}
                                 >
-                                  <span className={admin && !childSelected && isTallerOrigin(child.origin) ? "text-red-600" : undefined}>
+                                  <span
+                                    className={
+                                      admin && !childSelected && isTallerOrigin(child.origin)
+                                        ? "text-red-600"
+                                        : undefined
+                                    }
+                                  >
                                     {child.name}
                                   </span>
                                 </button>
-                                {admin ? (
+                                {admin && !isTallerOrigin(child.origin) ? (
                                   <button
                                     type="button"
-                                    aria-label={
-                                      isTallerOrigin(child.origin)
-                                        ? `Sacar ${child.name} de ${item.name}`
-                                        : `Eliminar ${child.name}`
-                                    }
+                                    aria-label={`Eliminar ${child.name}`}
+                                    onClick={() => void deleteCreatedChild(item.id, child.id)}
+                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black text-sm font-bold leading-none text-white hover:bg-neutral-800"
+                                  >
+                                    ×
+                                  </button>
+                                ) : admin ? (
+                                  <button
+                                    type="button"
+                                    aria-label={`Sacar ${child.name} de ${item.name}`}
                                     onClick={() => void deleteCreatedChild(item.id, child.id)}
                                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400"
                                   >
@@ -1676,6 +1710,8 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
 const categoryIdle = "text-neutral-900 hover:bg-sky-100 hover:text-sky-700";
 const categoryActive = "bg-sky-700 font-bold text-white shadow-[inset_4px_0_0_#7dd3fc] hover:bg-sky-800";
 const categoryBranch = "bg-sky-100 font-bold text-sky-800 shadow-[inset_4px_0_0_#0284c7]";
+const storeSubIdle = "bg-black text-white hover:bg-neutral-800";
+const storeSubActive = "bg-black font-bold text-white ring-1 ring-white/70";
 
 function TrashIcon() {
   return (

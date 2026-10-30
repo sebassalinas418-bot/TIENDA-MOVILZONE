@@ -108,7 +108,7 @@ function keepAlignedNode(
   if (live.has(id) || live.has(slugTallerCategory(name))) return true
   if (STORE_ONLY_CHILD_IDS.has(id) || isBuiltinStoreCategory(id)) return true
   if (isTallerOrigin(origin)) return false
-  return false
+  return true
 }
 
 /** Deja el menú de la tienda alineado a las categorías vivas de Taller. */
