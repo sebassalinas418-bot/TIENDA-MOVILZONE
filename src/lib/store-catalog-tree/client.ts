@@ -41,6 +41,12 @@ export function pushCatalogTree(patch: CatalogTreePatch) {
   if (!holdPublish) void flushCatalogTree();
 }
 
+function restoreQueued(body: CatalogTreePatch) {
+  const arrived = queued;
+  if (arrived) queued = { ...body, ...arrived };
+  else queued = body;
+}
+
 export async function publishQueuedCatalogTree(): Promise<{ ok: boolean; error?: string }> {
   extraDirty = false;
   const result = await flushCatalogTree({ force: true });
@@ -68,12 +74,12 @@ async function flushCatalogTree(options?: { force?: boolean }): Promise<{ ok: bo
           body: JSON.stringify(body),
         });
         if (!response.ok) {
-          queued = queued ? { ...body, ...queued } : body;
+          restoreQueued(body);
           lastError = "No se pudieron publicar los cambios.";
           break;
         }
       } catch {
-        queued = queued ? { ...body, ...queued } : body;
+        restoreQueued(body);
         lastError = "No se pudieron publicar los cambios.";
         break;
       }
