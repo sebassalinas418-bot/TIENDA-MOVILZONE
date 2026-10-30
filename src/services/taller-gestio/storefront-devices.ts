@@ -25,6 +25,7 @@ type DevicePayload = {
   color?: unknown;
   storage?: unknown;
   notes?: unknown;
+  description?: unknown;
   salePrice?: unknown;
   costPrice?: unknown;
   precio_costo_usd?: unknown;
@@ -52,6 +53,7 @@ type CatalogDevice = {
   color: string;
   storage: string;
   notes: string;
+  description: string;
   saleArs: number;
   imageUrl: string;
 };
@@ -153,6 +155,7 @@ function mapRow(row: DeviceStockRow, quote: number): CatalogDevice | null {
     color,
     storage,
     notes: asText(payload.notes),
+    description: asText(payload.description),
     saleArs: saleArsFor(payload, row, quote),
     imageUrl,
   };
@@ -203,7 +206,10 @@ export async function readDeviceStorefrontProducts(): Promise<Product[]> {
     const described = describeStock(stock);
     const specs = [first.color, first.storage].filter(Boolean).join(" · ");
     const title = `${first.brand} ${first.model}`.trim();
-    const details = [first.condition, specs, first.notes].filter(Boolean).join(" · ");
+    const catalogDescription =
+      units.map((unit) => unit.description).find((text) => text.trim().length > 0) ||
+      [first.condition, specs, first.notes].filter(Boolean).join(" · ");
+    const details = catalogDescription;
     const catalogImage =
       units.map((unit) => unit.imageUrl).find((src) => isSharedProductImage(src)) || catalogImages[id];
     products.push({
