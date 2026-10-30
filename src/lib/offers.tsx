@@ -335,8 +335,9 @@ export function CatalogProvider({
       if (!id.startsWith("eq-") || !isSharedProductImage(image)) continue;
       const key = `${id}:${image}`;
       if (syncedDeviceImages.current.has(key)) continue;
-      syncedDeviceImages.current.add(key);
-      void persistStoreProductImage(id, image);
+      void persistStoreProductImage(id, image).then((ok) => {
+        if (ok) syncedDeviceImages.current.add(key);
+      });
     }
   }, [ready, images]);
 
@@ -658,7 +659,7 @@ export function CatalogProvider({
     const detailsChanged = patch.details != null;
     const persistImage = isPersistableProductImage(patch.image) ? patch.image!.trim() : "";
     if (!priceChanged && !stockChanged && !offerChanged && !persistImage && !titleChanged && !categoryChanged && !detailsChanged) return;
-    if (persistImage) void persistStoreProductImage(productId, persistImage);
+    if (isSharedProductImage(persistImage)) void persistStoreProductImage(productId, persistImage);
     if (productId.startsWith("eq-")) return;
     const originalImage =
       (remote ?? []).find((item) => item.id === productId)?.image ??

@@ -14,8 +14,18 @@ function socialDb() {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
-function shopId() {
-  return process.env.TALLER_SHOP_ID?.trim() || "";
+async function resolveShopId(client: NonNullable<ReturnType<typeof socialDb>>) {
+  const preferred = process.env.TALLER_SHOP_ID?.trim();
+  if (preferred) return preferred;
+  const { data, error } = await client
+    .from("shops")
+    .select("id")
+    .eq("status", "active")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) return "";
+  return data?.id?.trim() ?? "";
 }
 
 function objectPath(shop: string) {
@@ -65,8 +75,9 @@ async function writeMap(
 
 export async function readDeviceCatalogImages(): Promise<Record<string, string>> {
   const client = socialDb();
-  const shop = shopId();
-  if (!client || !shop) return {};
+  if (!client) return {};
+  const shop = await resolveShopId(client);
+  if (!shop) return {};
   return readMap(client, shop);
 }
 
@@ -102,8 +113,9 @@ async function persistImageOnDeviceRows(
 export async function writeDeviceCatalogImage(catalogId: string, imageUrl: string): Promise<boolean> {
   if (!isStoreDeviceCatalogId(catalogId) || !isSharedProductImage(imageUrl)) return false;
   const client = socialDb();
-  const shop = shopId();
-  if (!client || !shop) return false;
+  if (!client) return false;
+  const shop = await resolveShopId(client);
+  if (!shop) return false;
   const onRows = await persistImageOnDeviceRows(client, shop, catalogId, imageUrl.trim());
   const images = await readMap(client, shop);
   images[catalogId] = imageUrl.trim();

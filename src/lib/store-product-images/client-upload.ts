@@ -1,5 +1,5 @@
 import { prepareProductImageFile } from "@/lib/admin-image-tools/prepare-product-image";
-import { isPersistableProductImage } from "@/lib/store-product-images/public-url";
+import { isPersistableProductImage, isSharedProductImage } from "@/lib/store-product-images/public-url";
 
 export async function uploadStoreProductImage(
   file: File,
@@ -31,7 +31,7 @@ export async function uploadStoreProductImageFromDataUrl(dataUrl: string, produc
 }
 
 export async function persistStoreProductImage(productId: string, image: string) {
-  if (!productId || productId.startsWith("extra-")) return false;
+  if (!productId || productId.startsWith("extra-") || !isSharedProductImage(image)) return false;
   const response = await fetch("/api/store-product-image", {
     method: "PUT",
     credentials: "include",
