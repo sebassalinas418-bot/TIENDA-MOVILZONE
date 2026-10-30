@@ -8,11 +8,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { pushCatalogTree } from "@/lib/store-catalog-tree/client";
+import { fetchCatalogTree, pushCatalogTree } from "@/lib/store-catalog-tree/client";
+import {
+  categorySignature,
+  mergeStoreCategoryTrees,
+} from "@/services/taller-gestio/categories";
 
 /**
- * CMS simulado de la tienda. Vive solo en el navegador.
- * No lee ni escribe la base "sebfix".
+ * CMS de la tienda. El árbol de categorías y los destinos de productos
+ * se publican en Storage para que el celular y otras PCs vean lo mismo.
  */
 export type InfoPage = {
   slug: string;
@@ -295,6 +299,19 @@ export function StoreConfigProvider({ children }: { children: ReactNode }) {
 
     applySaved(window.localStorage.getItem(STORAGE_KEY));
 
+    void fetchCatalogTree().then((tree) => {
+      if (!tree?.categories.length) return;
+      setConfig((current) => {
+        const localIsDefault =
+          categorySignature(current.categories) === categorySignature(defaultStoreConfig.categories);
+        const categories = localIsDefault
+          ? tree.categories
+          : mergeStoreCategoryTrees(tree.categories, current.categories);
+        if (categorySignature(categories) === categorySignature(current.categories)) return current;
+        return { ...current, categories };
+      });
+    });
+
     function onStorage(event: StorageEvent) {
       if (event.key === STORAGE_KEY) applySaved(event.newValue);
     }
@@ -306,13 +323,15 @@ export function StoreConfigProvider({ children }: { children: ReactNode }) {
   const updateConfig = useCallback((partial: Partial<StoreConfig>, options?: UpdateConfigOptions) => {
     setConfig((current) => {
       const next = { ...current, ...partial };
-      try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, revision: CONFIG_REVISION }));
-      } catch {
-        /* cuota llena */
-      }
-      if (options?.persist !== false && partial.categories) {
-        pushCatalogTree({ categories: next.categories });
+      if (options?.persist !== false) {
+        try {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, revision: CONFIG_REVISION }));
+        } catch {
+          /* cuota llena */
+        }
+        if (partial.categories) {
+          pushCatalogTree({ categories: next.categories });
+        }
       }
       return next;
     });

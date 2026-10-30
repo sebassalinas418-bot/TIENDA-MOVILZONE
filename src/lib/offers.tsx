@@ -493,26 +493,29 @@ export function CatalogProvider({
       if (cancel || !remoteTree) return;
       const localCats = categoriesRef.current;
       const remoteCats = remoteTree.categories;
-      const mergedCats = mergeStoreCategoryTrees(remoteCats.length ? remoteCats : localCats, localCats);
+      const localIsDefault =
+        categorySignature(localCats) === categorySignature(defaultStoreConfig.categories);
+      const mergedCats = remoteCats.length
+        ? localIsDefault
+          ? remoteCats
+          : mergeStoreCategoryTrees(remoteCats, localCats)
+        : localCats;
       if (categorySignature(mergedCats) !== categorySignature(localCats)) {
         updateConfig({ categories: mergedCats }, { persist: false });
       }
-      const localEdited =
-        categorySignature(localCats) !== categorySignature(defaultStoreConfig.categories);
+      const localEdited = !localIsDefault;
       if (localEdited && (!remoteCats.length || categorySignature(mergedCats) !== categorySignature(remoteCats))) {
         pushCatalogTree({ categories: mergedCats });
       }
 
       const remotePlacements = remoteTree.placements ?? {};
       const localPlacements = placementsRef.current;
-      const mergedPlacements = { ...remotePlacements, ...localPlacements };
+      const mergedPlacements = { ...localPlacements, ...remotePlacements };
       if (JSON.stringify(mergedPlacements) !== JSON.stringify(localPlacements)) {
         setPlacements(mergedPlacements);
       }
-      if (
-        Object.keys(localPlacements).length > 0 &&
-        JSON.stringify(mergedPlacements) !== JSON.stringify(remotePlacements)
-      ) {
+      const hasUnsyncedPlacement = Object.keys(localPlacements).some((id) => !remotePlacements[id]);
+      if (hasUnsyncedPlacement) {
         pushCatalogTree({ placements: mergedPlacements });
       }
     }

@@ -19,12 +19,27 @@ function socialDb() {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
-function shopId() {
-  return process.env.TALLER_SHOP_ID?.trim() || "";
+async function candidateShopIds(client: NonNullable<ReturnType<typeof socialDb>>) {
+  const preferred = [
+    process.env.TALLER_SHOP_ID?.trim(),
+    process.env.WEB_STORE_SHOP_ID?.trim(),
+  ].filter((id): id is string => Boolean(id));
+  const { data } = await client
+    .from("shops")
+    .select("id")
+    .eq("status", "active")
+    .order("created_at", { ascending: true })
+    .limit(5);
+  const rest = (data ?? []).map((row) => row.id?.trim()).filter((id): id is string => Boolean(id));
+  return [...new Set([...preferred, ...rest])];
 }
 
-function objectPath() {
-  return `${shopId()}/store-catalog-tree.json`;
+function objectPath(shop: string) {
+  return `${shop}/store-catalog-tree.json`;
+}
+
+function treeHasContent(tree: StoreCatalogTree) {
+  return tree.categories.length > 0 || Object.keys(tree.placements).length > 0;
 }
 
 function asOrigin(value: unknown): CategoryOrigin | undefined {
@@ -134,10 +149,11 @@ async function allowCatalogJson(client: NonNullable<ReturnType<typeof socialDb>>
 
 async function writeFile(
   client: NonNullable<ReturnType<typeof socialDb>>,
+  shop: string,
   tree: StoreCatalogTree,
 ) {
   const body = Buffer.from(JSON.stringify(tree));
-  const path = objectPath();
+  const path = objectPath(shop);
   const tryUpload = (contentType: string) =>
     client.storage.from(BUCKET).upload(path, body, { contentType, upsert: true });
 
@@ -149,19 +165,42 @@ async function writeFile(
   return error;
 }
 
-export async function readStoreCatalogTree(): Promise<StoreCatalogTree> {
-  const empty: StoreCatalogTree = { categories: [], placements: {} };
-  const client = socialDb();
-  const shop = shopId();
-  if (!client || !shop) return empty;
-  const { data, error } = await client.storage.from(BUCKET).download(objectPath());
-  if (error || !data) return empty;
+async function downloadTree(
+  client: NonNullable<ReturnType<typeof socialDb>>,
+  shop: string,
+): Promise<StoreCatalogTree | null> {
+  const { data, error } = await client.storage.from(BUCKET).download(objectPath(shop));
+  if (error || !data) return null;
   try {
     const parsed = JSON.parse(await data.text()) as { categories?: unknown; placements?: unknown };
     return sanitizeCatalogTree(parsed);
   } catch {
-    return empty;
+    return null;
   }
+}
+
+export async function readStoreCatalogTree(): Promise<StoreCatalogTree> {
+  const empty: StoreCatalogTree = { categories: [], placements: {} };
+  const client = socialDb();
+  if (!client) return empty;
+  const shops = await candidateShopIds(client);
+  let fallback = empty;
+  for (const shop of shops) {
+    const tree = await downloadTree(client, shop);
+    if (!tree) continue;
+    if (treeHasContent(tree)) return tree;
+    fallback = tree;
+  }
+  return fallback;
+}
+
+async function resolveWriteShop(client: NonNullable<ReturnType<typeof socialDb>>) {
+  const shops = await candidateShopIds(client);
+  for (const shop of shops) {
+    const tree = await downloadTree(client, shop);
+    if (tree && treeHasContent(tree)) return shop;
+  }
+  return shops[0] || "";
 }
 
 export async function writeStoreCatalogTree(patch: {
@@ -169,17 +208,20 @@ export async function writeStoreCatalogTree(patch: {
   placements?: unknown;
 }): Promise<{ ok: true; tree: StoreCatalogTree } | { ok: false; error: string }> {
   const client = socialDb();
-  const shop = shopId();
-  if (!client || !shop) {
+  if (!client) {
     return { ok: false, error: "Falta conexión para guardar el catálogo." };
   }
-  const current = await readStoreCatalogTree();
+  const shop = await resolveWriteShop(client);
+  if (!shop) {
+    return { ok: false, error: "Falta conexión para guardar el catálogo." };
+  }
+  const current = (await downloadTree(client, shop)) ?? { categories: [], placements: {} };
   const incoming = sanitizeCatalogTree(patch);
   const tree: StoreCatalogTree = {
     categories: patch.categories !== undefined ? incoming.categories : current.categories,
     placements: patch.placements !== undefined ? incoming.placements : current.placements,
   };
-  const error = await writeFile(client, tree);
+  const error = await writeFile(client, shop, tree);
   if (error) return { ok: false, error: error.message };
   return { ok: true, tree };
 }
