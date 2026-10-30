@@ -1,6 +1,10 @@
 import { connection } from "next/server";
 import { revalidatePath } from "next/cache";
-import { removeStoreChild } from "@/services/taller-gestio/categories";
+import {
+  promoteChildToTopLevel,
+  remapPlacementsAfterPromote,
+  removeStoreChild,
+} from "@/services/taller-gestio/categories";
 import { readStoreCatalogTree, writeStoreCatalogTree } from "@/services/store-catalog-tree/server";
 
 const noStore = {
@@ -26,7 +30,19 @@ export async function PUT(request: Request) {
   if (!result.ok) {
     return Response.json({ ok: false, error: result.error }, { status: 503, headers: noStore });
   }
+  revalidateStorefront();
   return Response.json({ ok: true, ...result.tree }, { headers: noStore });
+}
+
+function revalidateStorefront() {
+  try {
+    revalidatePath("/tienda");
+    revalidatePath("/");
+    revalidatePath("/admin");
+    revalidatePath("/", "layout");
+  } catch {
+    /* cacheComponents puede ignorar el tag; el JSON ya está persistido */
+  }
 }
 
 function treeId(value: string | null) {
@@ -62,12 +78,55 @@ export async function DELETE(request: Request) {
       { status: 503, headers: noStore },
     );
   }
+  revalidateStorefront();
+  return Response.json({ ok: true, ...stored }, { headers: noStore });
+}
+
+export async function PATCH(request: Request) {
+  await connection();
+  let body: { action?: unknown; parentId?: unknown; childId?: unknown; categories?: unknown } = {};
   try {
-    revalidatePath("/tienda");
-    revalidatePath("/");
-    revalidatePath("/admin");
+    body = (await request.json()) as typeof body;
   } catch {
-    /* cacheComponents puede ignorar el tag; el JSON ya está persistido */
+    return Response.json({ ok: false, error: "JSON inválido." }, { status: 400, headers: noStore });
   }
+  const current = await readStoreCatalogTree();
+  if (body.action === "replace" && body.categories !== undefined) {
+    const result = await writeStoreCatalogTree({
+      categories: body.categories,
+      placements: current.placements,
+    });
+    if (!result.ok) {
+      return Response.json({ ok: false, error: result.error }, { status: 503, headers: noStore });
+    }
+    revalidateStorefront();
+    return Response.json({ ok: true, ...result.tree }, { headers: noStore });
+  }
+  if (body.action !== "promote") {
+    return Response.json({ ok: false, error: "Acción de jerarquía inválida." }, { status: 400, headers: noStore });
+  }
+  const parentId = treeId(typeof body.parentId === "string" ? body.parentId : null);
+  const childId = treeId(typeof body.childId === "string" ? body.childId : null);
+  if (!parentId || !childId) {
+    return Response.json({ ok: false, error: "Falta el id de la subcategoría." }, { status: 400, headers: noStore });
+  }
+  const categories = promoteChildToTopLevel(current.categories, parentId, childId);
+  const placements = remapPlacementsAfterPromote(current.placements, childId);
+  const result = await writeStoreCatalogTree({ categories, placements });
+  if (!result.ok) {
+    return Response.json({ ok: false, error: result.error }, { status: 503, headers: noStore });
+  }
+  const stored = await readStoreCatalogTree();
+  const stillNested = stored.categories.some(
+    (item) => item.id === parentId && item.children.some((child) => child.id === childId),
+  );
+  const asMain = stored.categories.some((item) => item.id === childId);
+  if (stillNested || !asMain) {
+    return Response.json(
+      { ok: false, error: "Storage no confirmó el cambio de jerarquía." },
+      { status: 503, headers: noStore },
+    );
+  }
+  revalidateStorefront();
   return Response.json({ ok: true, ...stored }, { headers: noStore });
 }

@@ -49,6 +49,48 @@ export function syncQueuedCategories(categories: StoreCategorySlice[]) {
   notifyQueue();
 }
 
+export async function persistPublishedCatalogTree(categories: StoreCategorySlice[]) {
+  const response = await fetch("/api/store-catalog-tree", {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({ action: "replace", categories }),
+  });
+  let body: { ok?: boolean; error?: string; categories?: StoreCategorySlice[] } = {};
+  try {
+    body = (await response.json()) as typeof body;
+  } catch {
+    body = {};
+  }
+  if (!response.ok || !body.ok) {
+    throw new Error(body.error || "No se pudo guardar la jerarquía.");
+  }
+  if (Array.isArray(body.categories)) syncQueuedCategories(body.categories);
+  return body;
+}
+
+export async function promotePublishedSubcategory(parentId: string, childId: string) {
+  const response = await fetch("/api/store-catalog-tree", {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({ action: "promote", parentId, childId }),
+  });
+  let body: { ok?: boolean; error?: string; categories?: StoreCategorySlice[] } = {};
+  try {
+    body = (await response.json()) as typeof body;
+  } catch {
+    body = {};
+  }
+  if (!response.ok || !body.ok) {
+    throw new Error(body.error || "No se pudo publicar la categoría principal.");
+  }
+  if (Array.isArray(body.categories)) syncQueuedCategories(body.categories);
+  return body;
+}
+
 export async function deletePublishedSubcategory(parentId: string, childId: string) {
   const params = new URLSearchParams({ parentId, childId });
   const response = await fetch(`/api/store-catalog-tree?${params}`, {

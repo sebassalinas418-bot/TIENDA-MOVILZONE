@@ -26,7 +26,11 @@ import { useAdminCatalogPublish } from "@/lib/admin-catalog-publish";
 import { useAdminAccess } from "@/lib/admin-access";
 import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
 import { storeSearchPath } from "@/lib/store-search-path";
-import { deletePublishedSubcategory } from "@/lib/store-catalog-tree/client";
+import {
+  deletePublishedSubcategory,
+  persistPublishedCatalogTree,
+  promotePublishedSubcategory,
+} from "@/lib/store-catalog-tree/client";
 import {
   collectCategoryFilterIds,
   isTallerOrigin,
@@ -465,12 +469,13 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   }
 
   function nestIntoStoreCategory(tallerId: string, storeParentId: string) {
-    updateConfig({
-      categories: nestTallerCategory(config.categories, tallerId, storeParentId),
-    });
+    const previous = config.categories;
+    const next = nestTallerCategory(previous, tallerId, storeParentId);
+    updateConfig({ categories: next }, { persist: false });
     setExpanded((current) =>
       current.includes(storeParentId) ? current : [...current, storeParentId],
     );
+    void persistHierarchy(previous, next);
   }
 
   function promoteSubcategoryToMain(parentId: string, childId: string) {
@@ -478,9 +483,9 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     const child = parent?.children.find((item) => item.id === childId);
     if (!parent || !child) return;
     const inSub = productsInSubcategory(parentId, childId);
-    updateConfig({
-      categories: promoteChildToTopLevel(config.categories, parentId, childId),
-    });
+    const previous = config.categories;
+    const next = promoteChildToTopLevel(previous, parentId, childId);
+    updateConfig({ categories: next }, { persist: false });
     for (const product of inSub) {
       void updateProduct(product.id, {
         category: child.name,
@@ -489,6 +494,32 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       });
     }
     setFilter({ kind: "category", categoryId: child.id });
+    void (async () => {
+      try {
+        const body = await promotePublishedSubcategory(parentId, childId);
+        if (Array.isArray(body.categories)) {
+          updateConfig({ categories: body.categories }, { persist: false });
+        }
+        router.refresh();
+      } catch {
+        updateConfig({ categories: previous }, { persist: false });
+      }
+    })();
+  }
+
+  async function persistHierarchy(
+    previous: typeof config.categories,
+    next: typeof config.categories,
+  ) {
+    try {
+      const body = await persistPublishedCatalogTree(next);
+      if (Array.isArray(body.categories)) {
+        updateConfig({ categories: body.categories }, { persist: false });
+      }
+      router.refresh();
+    } catch {
+      updateConfig({ categories: previous }, { persist: false });
+    }
   }
 
   function deleteCreatedCategory(storeId: string) {
@@ -641,15 +672,17 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       }
     }
     if (dragged.level === "top" && target.level === "top") {
-      updateConfig({
-        categories: reorderTopLevel(config.categories, dragged.id, target.id),
-      });
+      const previous = config.categories;
+      const next = reorderTopLevel(previous, dragged.id, target.id);
+      updateConfig({ categories: next }, { persist: false });
+      void persistHierarchy(previous, next);
       return;
     }
     if (dragged.level === "child" && target.level === "child" && dragged.parentId === target.parentId) {
-      updateConfig({
-        categories: reorderChildren(config.categories, dragged.parentId, dragged.id, target.id),
-      });
+      const previous = config.categories;
+      const next = reorderChildren(previous, dragged.parentId, dragged.id, target.id);
+      updateConfig({ categories: next }, { persist: false });
+      void persistHierarchy(previous, next);
       return;
     }
     if (dragged.level === "child" && target.level === "top") {
@@ -942,9 +975,10 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                 if (dragged.level === "top") {
                   const first = config.categories[0];
                   if (first) {
-                    updateConfig({
-                      categories: reorderTopLevel(config.categories, dragged.id, first.id),
-                    });
+                    const previous = config.categories;
+                    const next = reorderTopLevel(previous, dragged.id, first.id);
+                    updateConfig({ categories: next }, { persist: false });
+                    void persistHierarchy(previous, next);
                   }
                 }
               }}

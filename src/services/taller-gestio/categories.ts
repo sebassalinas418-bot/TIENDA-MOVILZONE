@@ -421,6 +421,21 @@ export function promoteChildToTopLevel(
   return copy
 }
 
+export function remapPlacementsAfterPromote<T extends { categoryId: string; subcategoryId?: string }>(
+  placements: Record<string, T>,
+  childId: string,
+): Record<string, T> {
+  const next: Record<string, T> = {}
+  for (const [id, placed] of Object.entries(placements)) {
+    if (placed.categoryId === childId || placed.subcategoryId === childId) {
+      next[id] = { ...placed, categoryId: childId, subcategoryId: undefined }
+    } else {
+      next[id] = placed
+    }
+  }
+  return next
+}
+
 export function unnestTallerCategory(
   categories: StoreCategorySlice[],
   tallerId: string,
