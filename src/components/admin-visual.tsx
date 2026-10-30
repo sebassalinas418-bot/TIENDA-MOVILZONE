@@ -59,6 +59,10 @@ export function ProductEditModal({
   useEffect(() => {
     setExtraImages(product.extraImages ?? []);
   }, [product.id]);
+  useEffect(() => {
+    setCategoryId(product.categoryId);
+    setSubcategoryId(product.subcategoryId);
+  }, [product.id, product.categoryId, product.subcategoryId]);
   const category = config.categories.find((item) => item.id === categoryId) ?? config.categories[0];
   const numericPrice = Number(price);
   const numericStock = Number(stockValue);

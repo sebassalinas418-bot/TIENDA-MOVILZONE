@@ -22,6 +22,7 @@ import {
   useAdminCatalogSearch,
   type AdminCatalogFilter,
 } from "@/lib/admin-catalog-search";
+import { useAdminCatalogPublish } from "@/lib/admin-catalog-publish";
 import { useAdminAccess } from "@/lib/admin-access";
 import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
 import { storeSearchPath } from "@/lib/store-search-path";
@@ -183,7 +184,6 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     updateProduct,
     addProduct,
     placements,
-    placeProduct,
     clearProductPlacement,
     toggleProductHidden,
   } = useCatalog();
@@ -205,11 +205,20 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   const [subDraft, setSubDraft] = useState<{ categoryId: string; name: string } | null>(null);
   const [coverEdit, setCoverEdit] = useState<{ categoryId: string; subcategoryId: string } | null>(null);
   const [imageEditId, setImageEditId] = useState<string | null>(null);
+  const [moveConfirm, setMoveConfirm] = useState<{
+    productId: string;
+    title: string;
+    categoryId: string;
+    subcategoryId: string;
+    categoryName: string;
+    label: string;
+  } | null>(null);
   const [session, setSession] = useState<DemoSession | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const { addItem, openCart, closeCart } = useCart();
   const { stock } = useOrders();
   const { isAdmin: sessionIsAdmin } = useAdminAccess();
+  const catalogPublish = useAdminCatalogPublish();
   const canManage = admin || sessionIsAdmin;
   const adminSearch = useAdminCatalogSearch();
 
@@ -517,16 +526,50 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   }
 
   function assignProductToStoreCategory(productId: string, target: CategoryDrag) {
+    const product = products.find((item) => item.id === productId);
     if (target.level === "top") {
-      placeProduct(productId, target.id);
-      setFilter({ kind: "category", categoryId: target.id });
-      setExpanded((current) => (current.includes(target.id) ? current : [...current, target.id]));
+      const item = config.categories.find((entry) => entry.id === target.id);
+      setMoveConfirm({
+        productId,
+        title: product?.title ?? "este producto",
+        categoryId: target.id,
+        subcategoryId: "",
+        categoryName: item?.name ?? target.id,
+        label: item?.name ?? target.id,
+      });
       return;
     }
-    placeProduct(productId, target.parentId, target.id);
-    setFilter({ kind: "sub", categoryId: target.parentId, subcategoryId: target.id });
+    const parent = config.categories.find((entry) => entry.id === target.parentId);
+    const child = parent?.children.find((entry) => entry.id === target.id);
+    setMoveConfirm({
+      productId,
+      title: product?.title ?? "este producto",
+      categoryId: target.parentId,
+      subcategoryId: target.id,
+      categoryName: parent?.name ?? target.parentId,
+      label: parent && child ? `${parent.name} → ${child.name}` : (child?.name ?? parent?.name ?? target.id),
+    });
+  }
+
+  async function confirmProductCategoryMove() {
+    if (!moveConfirm) return;
+    const next = moveConfirm;
+    setMoveConfirm(null);
+    await updateProduct(next.productId, {
+      category: next.categoryName,
+      categoryId: next.categoryId,
+      subcategoryId: next.subcategoryId,
+    });
+    if (next.subcategoryId) {
+      setFilter({ kind: "sub", categoryId: next.categoryId, subcategoryId: next.subcategoryId });
+      setExpanded((current) =>
+        current.includes(next.categoryId) ? current : [...current, next.categoryId],
+      );
+      return;
+    }
+    setFilter({ kind: "category", categoryId: next.categoryId });
     setExpanded((current) =>
-      current.includes(target.parentId) ? current : [...current, target.parentId],
+      current.includes(next.categoryId) ? current : [...current, next.categoryId],
     );
   }
 
@@ -975,7 +1018,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
 
   const catalog = (
     <>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-2 py-3 sm:px-6 sm:py-8">
+      <main className={`mx-auto w-full max-w-6xl flex-1 px-2 py-3 sm:px-6 sm:py-8 ${admin && catalogPublish?.pending ? "pb-28" : ""}`}>
         {admin ? (
           <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-2 sm:border-0 sm:bg-transparent sm:p-0">
             <div className="flex items-center gap-2">
@@ -1238,6 +1281,49 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
           </div>
         </div>
       </main>
+      {admin && moveConfirm ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setMoveConfirm(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="move-category-title"
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+          >
+            <h2 id="move-category-title" className="text-lg font-bold text-neutral-950">
+              Cambiar categoría
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-neutral-700">
+              ¿Pasar <span className="font-semibold text-neutral-950">{moveConfirm.title}</span> a{" "}
+              <span className="font-semibold text-neutral-950">{moveConfirm.label}</span>?
+            </p>
+            <p className="mt-2 text-xs font-medium text-neutral-500">
+              Si confirmás, el producto queda en esa categoría también al editarlo.
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setMoveConfirm(null)}
+                className="rounded-full px-4 py-2.5 text-sm font-semibold text-neutral-800 hover:bg-neutral-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmProductCategoryMove()}
+                className="rounded-full bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {canManage && editing ? (
         <ProductEditModal
           product={editing}

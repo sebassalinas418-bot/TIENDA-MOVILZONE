@@ -17,10 +17,16 @@ import {
   mergeStoreCategoryTrees,
   mergeTallerCategoriesIntoStore,
 } from "@/services/taller-gestio/categories";
-import { fetchCatalogTree, pushCatalogTree } from "@/lib/store-catalog-tree/client";
+import {
+  catalogTreeIsPending,
+  fetchCatalogTree,
+  markAdminCatalogDirty,
+  pushCatalogTree,
+} from "@/lib/store-catalog-tree/client";
 import {
   loadProductPlacements,
   saveProductPlacements,
+  storeVisibleCategory,
   type StoreProductPlacement,
 } from "@/lib/store-product-placements";
 import { loadProductDetails, saveProductDetails } from "@/lib/store-product-details";
@@ -489,6 +495,7 @@ export function CatalogProvider({
     let cancel = false;
 
     async function pullTree() {
+      if (catalogTreeIsPending()) return;
       const remoteTree = await fetchCatalogTree();
       if (cancel || !remoteTree) return;
       const localCats = categoriesRef.current;
@@ -548,20 +555,38 @@ export function CatalogProvider({
 
   const products = useMemo(
     () =>
-      [...(remote ?? []), ...extras].map((product) => ({
-        ...applyOffer(
-          {
-            ...product,
-            price: prices[product.id] ?? product.price,
-            image: pickCatalogImage(images[product.id], product.image),
-          },
-          offers[product.id],
-        ),
-        storeHidden: Boolean(hidden[product.id]),
-        details: product.details?.trim() || details[product.id] || undefined,
-        extraImages: extraImages[product.id] || product.extraImages || [],
-      })),
-    [details, extraImages, extras, hidden, images, offers, prices, remote],
+      [...(remote ?? []), ...extras].map((product) => {
+        const vis = storeVisibleCategory(
+          product.id,
+          { categoryId: product.categoryId, subcategoryId: product.subcategoryId },
+          placements,
+        );
+        const parent =
+          config.categories.find((item) => item.id === vis.categoryId) ??
+          config.categories.find((item) =>
+            item.children.some((child) => child.id === vis.categoryId || child.id === vis.subcategoryId),
+          );
+        const child = parent?.children.find(
+          (item) => item.id === vis.subcategoryId || item.id === vis.categoryId,
+        );
+        return {
+          ...applyOffer(
+            {
+              ...product,
+              price: prices[product.id] ?? product.price,
+              image: pickCatalogImage(images[product.id], product.image),
+              category: parent?.name ?? product.category,
+              categoryId: parent?.id ?? vis.categoryId,
+              subcategoryId: (child && vis.subcategoryId ? child.id : vis.subcategoryId) ?? "",
+            },
+            offers[product.id],
+          ),
+          storeHidden: Boolean(hidden[product.id]),
+          details: product.details?.trim() || details[product.id] || undefined,
+          extraImages: extraImages[product.id] || product.extraImages || [],
+        };
+      }),
+    [config.categories, details, extraImages, extras, hidden, images, offers, placements, prices, remote],
   );
 
   function saveOffer(productId: string, offer: ProductOffer) {
@@ -588,6 +613,7 @@ export function CatalogProvider({
       if (isPersistableProductImage(image)) {
         setImages((current) => ({ ...current, [productId]: image }));
         setExtras((current) => current.map((item) => (item.id === productId ? { ...item, image } : item)));
+        markAdminCatalogDirty();
       }
     }
     if (patch.details != null) {
@@ -628,25 +654,39 @@ export function CatalogProvider({
       setExtras((current) => current.map((item) => (item.id === productId ? { ...item, title } : item)));
     }
     if (patch.categoryId) {
+      const nextCategory = patch.category?.trim();
+      const nextSub = patch.subcategoryId || undefined;
       setPlacements((current) => {
         const next = {
           ...current,
           [productId]: {
             categoryId: patch.categoryId!,
-            subcategoryId: patch.subcategoryId || undefined,
+            subcategoryId: nextSub,
           },
         };
         pushCatalogTree({ placements: next });
         return next;
       });
+      setRemote((current) =>
+        current?.map((item) =>
+          item.id === productId
+            ? {
+                ...item,
+                category: nextCategory || item.category,
+                categoryId: patch.categoryId!,
+                subcategoryId: nextSub ?? "",
+              }
+            : item,
+        ) ?? current,
+      );
       setExtras((current) =>
         current.map((item) =>
           item.id === productId
             ? {
                 ...item,
-                category: patch.category?.trim() || item.category,
+                category: nextCategory || item.category,
                 categoryId: patch.categoryId!,
-                subcategoryId: patch.subcategoryId ?? item.subcategoryId,
+                subcategoryId: nextSub ?? item.subcategoryId,
               }
             : item,
         ),

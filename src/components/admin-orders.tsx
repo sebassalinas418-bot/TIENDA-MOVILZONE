@@ -8,6 +8,7 @@ import { AdminCustomers } from "@/components/admin-customers";
 import { AdminRedes } from "@/components/admin-redes";
 import { StoreCatalog } from "@/components/store-catalog";
 import { SiteFrame } from "@/components/site-frame";
+import { useAdminCatalogPublish } from "@/lib/admin-catalog-publish";
 import { AdminCatalogSearchProvider } from "@/lib/admin-catalog-search";
 import { describeStock, formatPrice } from "@/data/products";
 import { useAdminAccess } from "@/lib/admin-access";
@@ -94,6 +95,21 @@ export function AdminOrders() {
 
   return (
     <AdminCatalogSearchProvider initialQuery={searchQ}>
+      <AdminShell section={section} onSection={setSection} />
+    </AdminCatalogSearchProvider>
+  );
+}
+
+function AdminShell({
+  section,
+  onSection,
+}: {
+  section: AdminSection;
+  onSection: (section: AdminSection) => void;
+}) {
+  const publish = useAdminCatalogPublish();
+
+  return (
     <SiteFrame hideFooter>
       <header className="border-b border-gray-100 bg-white/90">
         <div className="mx-auto w-full max-w-6xl px-3 py-3 sm:px-6 sm:py-5">
@@ -115,7 +131,14 @@ export function AdminOrders() {
               <button
                 key={id}
                 type="button"
-                onClick={() => setSection(id)}
+                onClick={() => {
+                  if (id === section) return;
+                  if (section === "tienda") {
+                    publish?.requestLeave(() => onSection(id));
+                    return;
+                  }
+                  onSection(id);
+                }}
                 className={`shrink-0 rounded-full px-3.5 py-2 text-sm font-semibold ${
                   section === id ? "bg-sky-500 text-white" : "bg-neutral-950 text-white hover:bg-neutral-800"
                 }`}
@@ -146,7 +169,6 @@ export function AdminOrders() {
         </div>
       )}
     </SiteFrame>
-    </AdminCatalogSearchProvider>
   );
 }
 

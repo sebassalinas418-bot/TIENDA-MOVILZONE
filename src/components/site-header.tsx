@@ -1,11 +1,12 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AccountMenu } from "@/components/account-menu";
 import { MobileMenuButton } from "@/components/mobile-nav/store-mobile-chrome";
 import { useStoreConfig } from "@/config/store-config";
+import { useAdminCatalogPublish } from "@/lib/admin-catalog-publish";
 import { useAdminAccess } from "@/lib/admin-access";
 import { useCart } from "@/lib/cart";
 import type { DemoSession } from "@/lib/session";
@@ -55,9 +56,9 @@ export function SiteHeader({
       <div className="border-b border-white/10 bg-black">
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 sm:px-6 sm:py-3 lg:flex-nowrap lg:gap-6">
         <MobileMenuButton />
-        <Link href="/" className="shrink-0" aria-label="Movil zone, ir al inicio">
+        <GuardedLink href="/" className="shrink-0" aria-label="Movil zone, ir al inicio">
           <img src="/brand/logo-lockup.png" alt="" className="h-9 w-auto sm:h-14 lg:h-[4.5rem]" />
-        </Link>
+        </GuardedLink>
 
         <label className="relative order-3 min-w-0 w-full flex-1 basis-full lg:order-none lg:basis-0">
           <span className="sr-only">Buscar productos</span>
@@ -89,13 +90,13 @@ export function SiteHeader({
 
         <div className="ml-auto flex items-center gap-0.5 lg:ml-0 lg:gap-1">
           {isAdmin ? (
-            <Link
+            <GuardedLink
               href="/admin"
               className="inline-flex items-center gap-1.5 rounded-full bg-sky-500 px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-sky-400"
             >
               <GearIcon />
               Panel Admin
-            </Link>
+            </GuardedLink>
           ) : null}
           <span className="hidden lg:inline-flex">
             <AccountMenu session={session} onLogout={onLogout} />
@@ -190,6 +191,34 @@ function SectionLinksLive({ pathname, loggedIn }: { pathname: string; loggedIn: 
   return <SectionLinks pathname={pathname} vista={vista} loggedIn={loggedIn} />;
 }
 
+function GuardedLink({
+  href,
+  className,
+  "aria-label": ariaLabel,
+  children,
+}: {
+  href: string;
+  className?: string;
+  "aria-label"?: string;
+  children: ReactNode;
+}) {
+  const publish = useAdminCatalogPublish();
+  return (
+    <Link
+      href={href}
+      className={className}
+      aria-label={ariaLabel}
+      onClick={(event) => {
+        if (!publish?.pending) return;
+        event.preventDefault();
+        publish.requestLeave(() => window.location.assign(href));
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
 function SectionLinks({
   pathname,
   vista,
@@ -199,6 +228,7 @@ function SectionLinks({
   vista: string | null;
   loggedIn: boolean;
 }) {
+  const publish = useAdminCatalogPublish();
   const items = loggedIn
     ? [...links, { href: "/favoritos", label: "Favoritos" }]
     : links;
@@ -212,7 +242,9 @@ function SectionLinks({
             href={link.href}
             onClick={(event) => {
               event.preventDefault();
-              window.location.assign(link.href);
+              const go = () => window.location.assign(link.href);
+              if (publish?.pending) publish.requestLeave(go);
+              else go();
             }}
             className={`shrink-0 rounded-full px-2.5 py-1 text-[13px] font-medium transition-colors sm:px-3 sm:py-1.5 sm:text-sm ${
               active ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white"
