@@ -94,22 +94,14 @@ export function mergeStoreCategoryTrees(
     ]),
   )
   const order = primary.map((item) => item.id)
-  const secondaryIds = new Set(secondary.map((item) => item.id))
   for (const item of secondary) {
     const existing = byId.get(item.id)
     if (!existing) {
       if (isTallerOrigin(item.origin) || isBuiltinStoreCategory(item.id)) continue
       order.push(item.id)
       byId.set(item.id, { ...item, children: [...item.children] })
-      continue
     }
     // No reinsertar hijos del otro árbol: si se borró "auto" en Cargadores, no tiene que volver.
-  }
-  if (secondary.length > 0) {
-    for (const id of [...byId.keys()]) {
-      if (!isBuiltinStoreCategory(id) || secondaryIds.has(id)) continue
-      byId.delete(id)
-    }
   }
   return order
     .map((id) => byId.get(id))

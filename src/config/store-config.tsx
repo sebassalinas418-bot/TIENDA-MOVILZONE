@@ -252,7 +252,7 @@ export const defaultStoreConfig: StoreConfig = {
 };
 
 const STORAGE_KEY = "movilzone.store-config";
-const CONFIG_REVISION = 2;
+const CONFIG_REVISION = 3;
 
 export type UpdateConfigOptions = {
   persist?: boolean;
@@ -288,11 +288,7 @@ export function StoreConfigProvider({ children }: { children: ReactNode }) {
     void fetchCatalogTree().then((tree) => {
       if (!tree?.categories.length) return;
       setConfig((current) => {
-        const localIsDefault =
-          categorySignature(current.categories) === categorySignature(defaultStoreConfig.categories);
-        const categories = localIsDefault
-          ? tree.categories
-          : mergeStoreCategoryTrees(current.categories, tree.categories);
+        const categories = mergeStoreCategoryTrees(tree.categories, current.categories);
         if (categorySignature(categories) === categorySignature(current.categories)) return current;
         return { ...current, categories };
       });

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { describeStock, products as baseProducts, type Product } from "@/data/products";
-import { defaultStoreConfig, useStoreConfig } from "@/config/store-config";
+import { useStoreConfig } from "@/config/store-config";
 import { useOrders } from "@/lib/orders";
 import { fetchTallerCatalog, pushTallerProduct } from "@/services/taller-gestio/browser";
 import { persistStoreProductImage } from "@/lib/store-product-images/client-upload";
@@ -500,19 +500,11 @@ export function CatalogProvider({
       if (cancel || !remoteTree) return;
       const localCats = categoriesRef.current;
       const remoteCats = remoteTree.categories;
-      const localIsDefault =
-        categorySignature(localCats) === categorySignature(defaultStoreConfig.categories);
       const mergedCats = remoteCats.length
-        ? localIsDefault
-          ? remoteCats
-          : mergeStoreCategoryTrees(localCats, remoteCats)
+        ? mergeStoreCategoryTrees(remoteCats, localCats)
         : localCats;
       if (categorySignature(mergedCats) !== categorySignature(localCats)) {
         updateConfig({ categories: mergedCats }, { persist: false });
-      }
-      const localEdited = !localIsDefault;
-      if (localEdited && (!remoteCats.length || categorySignature(mergedCats) !== categorySignature(remoteCats))) {
-        pushCatalogTree({ categories: mergedCats });
       }
 
       const remotePlacements = remoteTree.placements ?? {};

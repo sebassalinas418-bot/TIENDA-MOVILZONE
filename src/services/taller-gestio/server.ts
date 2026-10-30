@@ -35,12 +35,12 @@ export type WebSaleItem = {
 
 const categoryMap: Record<string, { categoryId: string; subcategoryId: string; image: string }> = {
   fundas: { categoryId: "fundas", subcategoryId: "silicona", image: "/categories/fundas.jpg" },
-  vidrios: { categoryId: "protectores", subcategoryId: "vidrios", image: "/categories/protectores.jpg" },
-  "vidrios templados": { categoryId: "protectores", subcategoryId: "vidrios", image: "/categories/protectores.jpg" },
+  vidrios: { categoryId: "vidrios-templados", subcategoryId: "", image: "/categories/protectores.jpg" },
+  "vidrios templados": { categoryId: "vidrios-templados", subcategoryId: "", image: "/categories/protectores.jpg" },
   cargadores: { categoryId: "cargadores", subcategoryId: "cargadores-rapidos", image: "/categories/cargadores.jpg" },
   cables: { categoryId: "cargadores", subcategoryId: "cables", image: "/categories/cables.jpg" },
   auriculares: { categoryId: "auriculares", subcategoryId: "inalambricos", image: "/categories/auriculares.jpg" },
-  soportes: { categoryId: "soportes", subcategoryId: "soportes-auto", image: "/categories/soportes.jpg" },
+  soportes: { categoryId: "soporte", subcategoryId: "", image: "/categories/accesorios.jpg" },
 };
 
 export function tallerConfigured() {
