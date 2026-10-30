@@ -26,6 +26,7 @@ import { useAdminCatalogPublish } from "@/lib/admin-catalog-publish";
 import { useAdminAccess } from "@/lib/admin-access";
 import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
 import { storeSearchPath } from "@/lib/store-search-path";
+import { deletePublishedSubcategory } from "@/lib/store-catalog-tree/client";
 import {
   collectCategoryFilterIds,
   isTallerOrigin,
@@ -534,12 +535,21 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
     });
   }
 
-  function removeChildAndResetFilter(parentId: string, childId: string) {
-    updateConfig({
-      categories: removeStoreChild(config.categories, parentId, childId),
-    });
+  async function removeChildAndResetFilter(parentId: string, childId: string) {
+    const previous = config.categories;
+    const next = removeStoreChild(previous, parentId, childId);
+    updateConfig({ categories: next }, { persist: false });
     if (filter.kind === "sub" && filter.subcategoryId === childId) {
       setFilter({ kind: "category", categoryId: parentId });
+    }
+    try {
+      const body = await deletePublishedSubcategory(parentId, childId);
+      if (Array.isArray(body.categories)) {
+        updateConfig({ categories: body.categories }, { persist: false });
+      }
+      router.refresh();
+    } catch {
+      updateConfig({ categories: previous }, { persist: false });
     }
   }
 
@@ -559,7 +569,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       });
       return;
     }
-    removeChildAndResetFilter(parentId, childId);
+    return removeChildAndResetFilter(parentId, childId);
   }
 
   function resolveRelocateDest(dest: string) {
@@ -606,7 +616,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
           setFilter({ kind: "all" });
         }
       } else {
-        removeChildAndResetFilter(relocateSub.parentId, relocateSub.childId);
+        await removeChildAndResetFilter(relocateSub.parentId, relocateSub.childId);
       }
       setRelocateSub(null);
     } finally {
@@ -1095,7 +1105,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                                         ? `Sacar ${child.name} de ${item.name}`
                                         : `Eliminar ${child.name}`
                                     }
-                                    onClick={() => deleteCreatedChild(item.id, child.id)}
+                                    onClick={() => void deleteCreatedChild(item.id, child.id)}
                                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400"
                                   >
                                     <TrashIcon />

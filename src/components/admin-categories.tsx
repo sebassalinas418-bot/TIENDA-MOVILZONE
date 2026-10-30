@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useStoreConfig, type CatalogCategory } from "@/config/store-config";
 import { useCatalog } from "@/lib/offers";
+import { deletePublishedSubcategory } from "@/lib/store-catalog-tree/client";
+import { removeStoreChild } from "@/services/taller-gestio/categories";
 
 function uniqueId(name: string, taken: string[]) {
   const base =
@@ -22,6 +25,7 @@ function uniqueId(name: string, taken: string[]) {
 }
 
 export function CategoryManager() {
+  const router = useRouter();
   const { config, updateConfig } = useStoreConfig();
   const { products } = useCatalog();
   const [categoryName, setCategoryName] = useState("");
@@ -77,14 +81,19 @@ export function CategoryManager() {
     );
   }
 
-  function removeSubcategory(categoryId: string, subcategoryId: string) {
-    save(
-      config.categories.map((item) =>
-        item.id === categoryId
-          ? { ...item, children: item.children.filter((child) => child.id !== subcategoryId) }
-          : item,
-      ),
-    );
+  async function removeSubcategory(categoryId: string, subcategoryId: string) {
+    const previous = config.categories;
+    const next = removeStoreChild(previous, categoryId, subcategoryId);
+    updateConfig({ categories: next }, { persist: false });
+    try {
+      const body = await deletePublishedSubcategory(categoryId, subcategoryId);
+      if (Array.isArray(body.categories)) {
+        updateConfig({ categories: body.categories }, { persist: false });
+      }
+      router.refresh();
+    } catch {
+      updateConfig({ categories: previous }, { persist: false });
+    }
   }
 
   return (
@@ -152,7 +161,7 @@ export function CategoryManager() {
                     />
                     <button
                       type="button"
-                      onClick={() => removeSubcategory(category.id, child.id)}
+                      onClick={() => void removeSubcategory(category.id, child.id)}
                       className="text-xs font-semibold text-gray-500 hover:text-red-600"
                     >
                       Quitar

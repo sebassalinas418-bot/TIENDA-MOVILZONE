@@ -42,6 +42,33 @@ export function pushCatalogTree(patch: CatalogTreePatch) {
   if (!holdPublish) void flushCatalogTree();
 }
 
+/** Evita que un PUT encolado restaure una subcategoría ya borrada en Storage. */
+export function syncQueuedCategories(categories: StoreCategorySlice[]) {
+  if (!queued) return;
+  queued = { ...queued, categories };
+  notifyQueue();
+}
+
+export async function deletePublishedSubcategory(parentId: string, childId: string) {
+  const params = new URLSearchParams({ parentId, childId });
+  const response = await fetch(`/api/store-catalog-tree?${params}`, {
+    method: "DELETE",
+    credentials: "include",
+    cache: "no-store",
+  });
+  let body: { ok?: boolean; error?: string; categories?: StoreCategorySlice[] } = {};
+  try {
+    body = (await response.json()) as typeof body;
+  } catch {
+    body = {};
+  }
+  if (!response.ok || !body.ok) {
+    throw new Error(body.error || "No se pudo eliminar la subcategoría.");
+  }
+  if (Array.isArray(body.categories)) syncQueuedCategories(body.categories);
+  return body;
+}
+
 function restoreQueued(body: CatalogTreePatch) {
   const arrived = queued;
   if (arrived) queued = { ...body, ...arrived };
