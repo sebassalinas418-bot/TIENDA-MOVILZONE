@@ -47,6 +47,7 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
   placementsRef.current = placements;
 
   useEffect(() => {
+    if (!window.location.pathname.startsWith("/admin")) return;
     setCatalogTreePublishHold(true);
     setPending(catalogTreeIsPending());
     const stop = subscribeCatalogTreeQueue(() => setPending(catalogTreeIsPending()));

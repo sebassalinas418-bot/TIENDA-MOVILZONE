@@ -36,7 +36,8 @@ export function setCatalogTreePublishHold(hold: boolean) {
 }
 
 export function pushCatalogTree(patch: CatalogTreePatch) {
-  queued = { ...queued, ...patch };
+  if (queued) queued = { ...queued, ...patch };
+  else queued = { ...patch };
   notifyQueue();
   if (!holdPublish) void flushCatalogTree();
 }

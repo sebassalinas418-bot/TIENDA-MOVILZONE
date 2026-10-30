@@ -1,7 +1,4 @@
-"use client";
-
 import type { ReactNode } from "react";
-import { usePathname } from "next/navigation";
 import { AdminCatalogPublishProvider } from "@/lib/admin-catalog-publish";
 import { CatalogProvider } from "@/lib/offers";
 
@@ -9,13 +6,7 @@ import { CatalogProvider } from "@/lib/offers";
 export function LiveCatalogShell({ children }: { children: ReactNode }) {
   return (
     <CatalogProvider>
-      <AdminPathPublish>{children}</AdminPathPublish>
+      <AdminCatalogPublishProvider>{children}</AdminCatalogPublishProvider>
     </CatalogProvider>
   );
-}
-
-function AdminPathPublish({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  if (!pathname.startsWith("/admin")) return children;
-  return <AdminCatalogPublishProvider>{children}</AdminCatalogPublishProvider>;
 }
