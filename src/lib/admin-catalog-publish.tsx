@@ -48,7 +48,7 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
 
   useEffect(() => {
     if (!window.location.pathname.startsWith("/admin")) return;
-    setCatalogTreePublishHold(true);
+    setCatalogTreePublishHold(false);
     setPending(catalogTreeIsPending());
     const stop = subscribeCatalogTreeQueue(() => setPending(catalogTreeIsPending()));
     return () => {
@@ -108,7 +108,7 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
         <div className="pointer-events-none fixed inset-x-0 bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] z-[70] flex justify-center px-3">
           <div className="pointer-events-auto flex w-full max-w-lg items-center gap-3 rounded-2xl border border-sky-200 bg-white px-4 py-3 shadow-xl shadow-sky-900/10">
             <p className="min-w-0 flex-1 text-sm font-semibold text-neutral-900">
-              Hay cambios de categorías o productos sin publicar.
+              No se pudieron guardar las categorías. Reintentá para que se vean en el celular.
             </p>
             <button
               type="button"

@@ -49,7 +49,7 @@ function asOrigin(value: unknown): CategoryOrigin | undefined {
 function asImage(value: unknown) {
   if (typeof value !== "string") return undefined;
   const image = value.trim();
-  if (!image || image.length > 500) return undefined;
+  if (!image || image.length > 2000) return undefined;
   if (image.startsWith("/") || /^https?:\/\//i.test(image)) return image;
   return undefined;
 }

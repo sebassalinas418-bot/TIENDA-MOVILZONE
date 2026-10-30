@@ -14,7 +14,6 @@ import {
 import { isPersistableProductImage, isSharedProductImage, pickCatalogImage } from "@/lib/store-product-images/public-url";
 import {
   categorySignature,
-  mergeStoreCategoryTrees,
   mergeTallerCategoriesIntoStore,
 } from "@/services/taller-gestio/categories";
 import {
@@ -319,8 +318,10 @@ export function CatalogProvider({
   const syncedDeviceImages = useRef(new Set<string>());
   const categoriesRef = useRef(config.categories);
   const placementsRef = useRef(placements);
+  const remoteRef = useRef(remote);
   categoriesRef.current = config.categories;
   placementsRef.current = placements;
+  remoteRef.current = remote;
 
   useEffect(() => {
     setOffers(loadOffers());
@@ -500,11 +501,15 @@ export function CatalogProvider({
       if (cancel || !remoteTree) return;
       const localCats = categoriesRef.current;
       const remoteCats = remoteTree.categories;
-      const mergedCats = remoteCats.length
-        ? mergeStoreCategoryTrees(remoteCats, localCats)
-        : localCats;
-      if (categorySignature(mergedCats) !== categorySignature(localCats)) {
-        updateConfig({ categories: mergedCats }, { persist: false });
+      const catalog = remoteRef.current ?? [];
+      const nextCats = catalog.length
+        ? mergeTallerCategoriesIntoStore(
+            remoteCats,
+            catalog.map((product) => product.category),
+          )
+        : remoteCats;
+      if (nextCats.length && categorySignature(nextCats) !== categorySignature(localCats)) {
+        updateConfig({ categories: nextCats }, { persist: false });
       }
 
       const remotePlacements = remoteTree.placements ?? {};
@@ -512,10 +517,6 @@ export function CatalogProvider({
       const mergedPlacements = { ...localPlacements, ...remotePlacements };
       if (JSON.stringify(mergedPlacements) !== JSON.stringify(localPlacements)) {
         setPlacements(mergedPlacements);
-      }
-      const hasUnsyncedPlacement = Object.keys(localPlacements).some((id) => !remotePlacements[id]);
-      if (hasUnsyncedPlacement) {
-        pushCatalogTree({ placements: mergedPlacements });
       }
     }
 

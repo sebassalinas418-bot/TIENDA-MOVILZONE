@@ -9,10 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { fetchCatalogTree, pushCatalogTree } from "@/lib/store-catalog-tree/client";
-import {
-  categorySignature,
-  mergeStoreCategoryTrees,
-} from "@/services/taller-gestio/categories";
+import { categorySignature } from "@/services/taller-gestio/categories";
 
 /**
  * CMS de la tienda. El árbol de categorías y los destinos de productos
@@ -252,7 +249,7 @@ export const defaultStoreConfig: StoreConfig = {
 };
 
 const STORAGE_KEY = "movilzone.store-config";
-const CONFIG_REVISION = 3;
+const CONFIG_REVISION = 4;
 
 export type UpdateConfigOptions = {
   persist?: boolean;
@@ -266,7 +263,10 @@ type StoreConfigContextValue = {
 const StoreConfigContext = createContext<StoreConfigContextValue | null>(null);
 
 export function StoreConfigProvider({ children }: { children: ReactNode }) {
-  const [config, setConfig] = useState<StoreConfig>(defaultStoreConfig);
+  const [config, setConfig] = useState<StoreConfig>(() => ({
+    ...defaultStoreConfig,
+    categories: [],
+  }));
 
   useEffect(() => {
     function applySaved(raw: string | null) {
@@ -277,7 +277,12 @@ export function StoreConfigProvider({ children }: { children: ReactNode }) {
           window.localStorage.removeItem(STORAGE_KEY);
           return;
         }
-        setConfig({ ...defaultStoreConfig, ...saved });
+        const { categories: _ignored, ...rest } = saved;
+        setConfig((current) => ({
+          ...defaultStoreConfig,
+          ...rest,
+          categories: current.categories,
+        }));
       } catch {
         window.localStorage.removeItem(STORAGE_KEY);
       }
@@ -288,9 +293,8 @@ export function StoreConfigProvider({ children }: { children: ReactNode }) {
     void fetchCatalogTree().then((tree) => {
       if (!tree?.categories.length) return;
       setConfig((current) => {
-        const categories = mergeStoreCategoryTrees(tree.categories, current.categories);
-        if (categorySignature(categories) === categorySignature(current.categories)) return current;
-        return { ...current, categories };
+        if (categorySignature(tree.categories) === categorySignature(current.categories)) return current;
+        return { ...current, categories: tree.categories };
       });
     });
 
@@ -307,7 +311,8 @@ export function StoreConfigProvider({ children }: { children: ReactNode }) {
       const next = { ...current, ...partial };
       if (options?.persist !== false) {
         try {
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, revision: CONFIG_REVISION }));
+          const { categories: _categories, ...rest } = next;
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...rest, revision: CONFIG_REVISION }));
         } catch {
           /* cuota llena */
         }
