@@ -2,9 +2,8 @@ import { randomUUID } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { connection } from "next/server";
 import { canAccessStoreRedesRequest } from "@/lib/store-redes/access";
-import { writeDeviceCatalogImage } from "@/lib/store-device-images/server";
+import { persistCatalogImageUrl } from "@/lib/store-catalog-image/persist";
 import { isSharedProductImage } from "@/lib/store-product-images/public-url";
-import { isStoreDeviceCatalogId } from "@/services/taller-gestio/storefront-devices";
 
 const BUCKET = "product-images";
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -26,19 +25,7 @@ function shopId() {
 }
 
 async function writeProductImageUrl(productId: string, imageUrl: string) {
-  if (!productId || productId.startsWith("extra-") || !isSharedProductImage(imageUrl)) return false;
-  if (isStoreDeviceCatalogId(productId)) {
-    return writeDeviceCatalogImage(productId, imageUrl);
-  }
-  const client = socialDb();
-  const shop = shopId();
-  if (!client || !shop) return false;
-  const { error } = await client
-    .from("products")
-    .update({ image_url: imageUrl, updated_at: new Date().toISOString() })
-    .eq("id", productId)
-    .eq("shop_id", shop);
-  return !error;
+  return persistCatalogImageUrl(productId, imageUrl);
 }
 
 export async function POST(request: Request) {

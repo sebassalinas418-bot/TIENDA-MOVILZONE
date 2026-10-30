@@ -3,8 +3,13 @@ import { describeStock, type Product } from "@/data/products";
 import { readDeviceCatalogImages } from "@/lib/store-device-images/server";
 import { isSharedProductImage } from "@/lib/store-product-images/public-url";
 import { defaultCategoryImage } from "@/services/taller-gestio/categories";
+import {
+  catalogIdForDevice,
+  isStoreDeviceCatalogId,
+  STORE_DEVICE_ID_PREFIX,
+} from "@/services/taller-gestio/storefront-device-id";
 
-export const STORE_DEVICE_ID_PREFIX = "eq-";
+export { isStoreDeviceCatalogId, STORE_DEVICE_ID_PREFIX };
 
 const CELULARES = {
   category: "Celulares",
@@ -24,6 +29,8 @@ type DevicePayload = {
   costPrice?: unknown;
   precio_costo_usd?: unknown;
   margen_ganancia?: unknown;
+  imageUrl?: unknown;
+  image_url?: unknown;
 };
 
 type DeviceStockRow = {
@@ -32,6 +39,7 @@ type DeviceStockRow = {
   payload: DevicePayload | null;
   precio_costo_usd?: number | null;
   margen_ganancia?: number | null;
+  image_url?: string | null;
 };
 
 type CatalogDevice = {
@@ -45,6 +53,7 @@ type CatalogDevice = {
   storage: string;
   notes: string;
   saleArs: number;
+  imageUrl: string;
 };
 
 function adminClient() {
@@ -70,10 +79,6 @@ async function resolveShopId(client: SupabaseClient) {
   return data?.id ?? null;
 }
 
-export function isStoreDeviceCatalogId(id: string) {
-  return id.startsWith(STORE_DEVICE_ID_PREFIX);
-}
-
 function asText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -81,33 +86,6 @@ function asText(value: unknown) {
 function asNumber(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
-}
-
-function slugPart(value: string) {
-  return (
-    value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "x"
-  );
-}
-
-function catalogIdFor(device: {
-  brand: string;
-  model: string;
-  color: string;
-  storage: string;
-  condition: string;
-}) {
-  return `${STORE_DEVICE_ID_PREFIX}${[
-    slugPart(device.brand),
-    slugPart(device.model),
-    slugPart(device.color),
-    slugPart(device.storage),
-    slugPart(device.condition),
-  ].join("-")}`;
 }
 
 function subcategoryId(condition: string) {
@@ -164,9 +142,10 @@ function mapRow(row: DeviceStockRow, quote: number): CatalogDevice | null {
   const color = asText(payload.color);
   const storage = asText(payload.storage);
   const device = { brand, model, color, storage, condition };
+  const imageUrl = asText(payload.imageUrl) || asText(payload.image_url) || asText(row.image_url);
   return {
     rowId: row.id,
-    catalogId: catalogIdFor(device),
+    catalogId: catalogIdForDevice(device),
     brand,
     model,
     condition,
@@ -175,13 +154,14 @@ function mapRow(row: DeviceStockRow, quote: number): CatalogDevice | null {
     storage,
     notes: asText(payload.notes),
     saleArs: saleArsFor(payload, row, quote),
+    imageUrl,
   };
 }
 
 async function loadDeviceRows(client: SupabaseClient, shopId: string): Promise<DeviceStockRow[]> {
   const full = await client
     .from("device_stock")
-    .select("id, device_code, payload, precio_costo_usd, margen_ganancia")
+    .select("id, device_code, payload, precio_costo_usd, margen_ganancia, image_url")
     .eq("shop_id", shopId);
   if (!full.error) return (full.data ?? []) as DeviceStockRow[];
   const basic = await client.from("device_stock").select("id, device_code, payload").eq("shop_id", shopId);
@@ -224,7 +204,8 @@ export async function readDeviceStorefrontProducts(): Promise<Product[]> {
     const specs = [first.color, first.storage].filter(Boolean).join(" · ");
     const title = `${first.brand} ${first.model}`.trim();
     const details = [first.condition, specs, first.notes].filter(Boolean).join(" · ");
-    const catalogImage = catalogImages[id];
+    const catalogImage =
+      units.map((unit) => unit.imageUrl).find((src) => isSharedProductImage(src)) || catalogImages[id];
     products.push({
       id,
       title: specs ? `${title} (${specs})` : title,
