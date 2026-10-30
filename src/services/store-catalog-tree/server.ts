@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   detachCablesAsTopLevel,
   remapCablesPlacements,
+  stripCargadoresLeftoverChildren,
   type CategoryOrigin,
   type StoreCategorySlice,
 } from "@/services/taller-gestio/categories";
@@ -139,7 +140,7 @@ export function sanitizeCatalogTree(input: {
     }
   }
   return {
-    categories: detachCablesAsTopLevel(categories),
+    categories: stripCargadoresLeftoverChildren(detachCablesAsTopLevel(categories)),
     placements: remapCablesPlacements(placements),
   };
 }

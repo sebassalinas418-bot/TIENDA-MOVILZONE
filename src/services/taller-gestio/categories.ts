@@ -72,10 +72,20 @@ const STORE_ONLY_CHILD_IDS = new Set([
   "rigidas",
   "disenos",
   "magsafe",
-  "cargadores-rapidos",
   "inalambricos",
   "energia",
   "celulares-nuevos",
+])
+
+const CARGADORES_LEFTOVER_CHILD_IDS = new Set([
+  "cables",
+  "cable",
+  "cargadores",
+  "cargadores-rapidos",
+  "cargador",
+  "auto",
+  "autromovil",
+  "automovil",
 ])
 
 function liveInventoryKeys(names: string[]) {
@@ -108,19 +118,21 @@ export function alignStoreMenuToTallerInventory(
 ) {
   const merged = mergeTallerCategoriesIntoStore(current, liveNames)
   const live = liveInventoryKeys(liveNames)
-  return detachCablesAsTopLevel(
-    merged
-      .map((item) => ({
-        ...item,
-        children: item.children.filter((child) =>
-          keepAlignedNode(child.id, child.name, child.origin, live),
+  return stripCargadoresLeftoverChildren(
+    detachCablesAsTopLevel(
+      merged
+        .map((item) => ({
+          ...item,
+          children: item.children.filter((child) =>
+            keepAlignedNode(child.id, child.name, child.origin, live),
+          ),
+        }))
+        .filter(
+          (item) =>
+            keepAlignedNode(item.id, item.name, item.origin, live) ||
+            item.children.length > 0,
         ),
-      }))
-      .filter(
-        (item) =>
-          keepAlignedNode(item.id, item.name, item.origin, live) ||
-          item.children.length > 0,
-      ),
+    ),
   )
 }
 
@@ -171,6 +183,27 @@ export function detachCablesAsTopLevel(categories: StoreCategorySlice[]) {
   return next
 }
 
+function isCargadoresLeftoverChild(id: string, name: string) {
+  const slug = slugTallerCategory(name)
+  return (
+    CARGADORES_LEFTOVER_CHILD_IDS.has(id) ||
+    CARGADORES_LEFTOVER_CHILD_IDS.has(slug) ||
+    isCablesNode(id, name) ||
+    isCargadoresNode(id, name)
+  )
+}
+
+/** Saca de Cargadores las subs duplicadas (Cargadores, Cables, auto, etc.). */
+export function stripCargadoresLeftoverChildren(categories: StoreCategorySlice[]) {
+  return categories.map((item) => {
+    if (!isCargadoresNode(item.id, item.name)) return item
+    return {
+      ...item,
+      children: item.children.filter((child) => !isCargadoresLeftoverChild(child.id, child.name)),
+    }
+  })
+}
+
 export function remapCablesPlacements<T extends { categoryId: string; subcategoryId?: string }>(
   placements: Record<string, T>,
 ): Record<string, T> {
@@ -178,6 +211,11 @@ export function remapCablesPlacements<T extends { categoryId: string; subcategor
   for (const [id, placed] of Object.entries(placements)) {
     if (placed.subcategoryId === "cables" || placed.categoryId === "cables") {
       next[id] = { ...placed, categoryId: "cables", subcategoryId: undefined }
+    } else if (
+      placed.subcategoryId &&
+      isCargadoresLeftoverChild(placed.subcategoryId, placed.subcategoryId)
+    ) {
+      next[id] = { ...placed, categoryId: "cargadores", subcategoryId: undefined }
     } else {
       next[id] = placed
     }

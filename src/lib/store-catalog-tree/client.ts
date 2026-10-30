@@ -1,6 +1,7 @@
 import {
   detachCablesAsTopLevel,
   remapCablesPlacements,
+  stripCargadoresLeftoverChildren,
   type StoreCategorySlice,
 } from "@/services/taller-gestio/categories";
 import type { StoreProductPlacement } from "@/lib/store-product-placements";
@@ -68,7 +69,7 @@ export async function persistPublishedCatalogTree(
   categories: StoreCategorySlice[],
   placements?: Record<string, StoreProductPlacement>,
 ) {
-  const nextCategories = detachCablesAsTopLevel(categories);
+  const nextCategories = stripCargadoresLeftoverChildren(detachCablesAsTopLevel(categories));
   const nextPlacements = placements ? remapCablesPlacements(placements) : undefined;
   skipPullUntil = Date.now() + 25000;
   queued = {
