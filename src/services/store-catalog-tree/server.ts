@@ -61,7 +61,7 @@ function withRememberedStoreChildren(disk: StoreCatalogTree): StoreCatalogTree {
   if (!lastWritten || Date.now() - lastWrittenAt > 60000) return disk;
   return {
     categories: lastWritten.categories,
-    placements: { ...lastWritten.placements, ...disk.placements },
+    placements: { ...disk.placements, ...lastWritten.placements },
   };
 }
 

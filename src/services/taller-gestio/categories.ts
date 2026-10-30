@@ -235,7 +235,7 @@ export function remapCablesPlacements<T extends { categoryId: string; subcategor
 ): Record<string, T> {
   const next: Record<string, T> = {}
   for (const [id, placed] of Object.entries(placements)) {
-    if (placed.subcategoryId === "cables" || placed.categoryId === "cables") {
+    if (isCablesNode(placed.subcategoryId ?? "", placed.subcategoryId ?? "")) {
       next[id] = { ...placed, categoryId: "cables", subcategoryId: undefined }
     } else if (
       placed.subcategoryId &&
