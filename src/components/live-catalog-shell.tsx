@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AdminCategoryRelocator } from "@/components/admin-category-relocator";
 import { AdminCatalogPublishProvider } from "@/lib/admin-catalog-publish";
 import { CatalogProvider } from "@/lib/offers";
 
@@ -6,7 +7,10 @@ import { CatalogProvider } from "@/lib/offers";
 export function LiveCatalogShell({ children }: { children: ReactNode }) {
   return (
     <CatalogProvider>
-      <AdminCatalogPublishProvider>{children}</AdminCatalogPublishProvider>
+      <AdminCatalogPublishProvider>
+        {children}
+        <AdminCategoryRelocator />
+      </AdminCatalogPublishProvider>
     </CatalogProvider>
   );
 }
