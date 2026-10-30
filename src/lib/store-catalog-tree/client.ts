@@ -68,12 +68,12 @@ async function flushCatalogTree(options?: { force?: boolean }): Promise<{ ok: bo
           body: JSON.stringify(body),
         });
         if (!response.ok) {
-          queued = { ...body, ...queued };
+          queued = queued ? { ...body, ...queued } : body;
           lastError = "No se pudieron publicar los cambios.";
           break;
         }
       } catch {
-        queued = { ...body, ...queued };
+        queued = queued ? { ...body, ...queued } : body;
         lastError = "No se pudieron publicar los cambios.";
         break;
       }
