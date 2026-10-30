@@ -26,16 +26,13 @@ import { useAdminCatalogPublish } from "@/lib/admin-catalog-publish";
 import { useAdminAccess } from "@/lib/admin-access";
 import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSession } from "@/lib/session";
 import { storeSearchPath } from "@/lib/store-search-path";
-import {
-  deletePublishedSubcategory,
-  persistPublishedCatalogTree,
-  promotePublishedSubcategory,
-} from "@/lib/store-catalog-tree/client";
+import { deletePublishedSubcategory, persistPublishedCatalogTree } from "@/lib/store-catalog-tree/client";
 import {
   collectCategoryFilterIds,
   isTallerOrigin,
   nestTallerCategory,
   promoteChildToTopLevel,
+  remapPlacementsAfterPromote,
   removeStoreCategory,
   removeStoreChild,
   reorderChildren,
@@ -494,25 +491,16 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
       });
     }
     setFilter({ kind: "category", categoryId: child.id });
-    void (async () => {
-      try {
-        const body = await promotePublishedSubcategory(parentId, childId);
-        if (Array.isArray(body.categories)) {
-          updateConfig({ categories: body.categories }, { persist: false });
-        }
-        router.refresh();
-      } catch {
-        updateConfig({ categories: previous }, { persist: false });
-      }
-    })();
+    void persistHierarchy(previous, next, remapPlacementsAfterPromote(placements, childId));
   }
 
   async function persistHierarchy(
     previous: typeof config.categories,
     next: typeof config.categories,
+    nextPlacements = placements,
   ) {
     try {
-      const body = await persistPublishedCatalogTree(next);
+      const body = await persistPublishedCatalogTree(next, nextPlacements);
       if (Array.isArray(body.categories)) {
         updateConfig({ categories: body.categories }, { persist: false });
       }

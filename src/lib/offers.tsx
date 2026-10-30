@@ -18,6 +18,7 @@ import {
 } from "@/services/taller-gestio/categories";
 import {
   catalogTreeIsPending,
+  catalogTreeWroteRecently,
   fetchCatalogTree,
   markAdminCatalogDirty,
   pushCatalogTree,
@@ -497,7 +498,7 @@ export function CatalogProvider({
     let cancel = false;
 
     async function pullTree() {
-      if (catalogTreeIsPending()) return;
+      if (catalogTreeIsPending() || catalogTreeWroteRecently()) return;
       const remoteTree = await fetchCatalogTree();
       if (cancel || !remoteTree) return;
       const localCats = categoriesRef.current;

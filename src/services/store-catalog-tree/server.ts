@@ -223,6 +223,9 @@ export async function writeStoreCatalogTree(patch: {
   }
   const current = (await downloadTree(client, shop)) ?? { categories: [], placements: {} };
   const incoming = sanitizeCatalogTree(patch);
+  if (patch.categories !== undefined && incoming.categories.length === 0 && current.categories.length > 0) {
+    return { ok: false, error: "No se pudo guardar la jerarquía vacía." };
+  }
   const tree: StoreCatalogTree = {
     categories: patch.categories !== undefined ? incoming.categories : current.categories,
     placements: patch.placements !== undefined ? incoming.placements : current.placements,
@@ -234,5 +237,17 @@ export async function writeStoreCatalogTree(patch: {
     if (error) lastError = error;
   }
   if (lastError) return { ok: false, error: lastError.message };
-  return { ok: true, tree };
+  const expected = hierarchyKey(tree.categories);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 150 * attempt));
+    const stored = (await downloadTree(client, shop)) ?? { categories: [], placements: {} };
+    if (hierarchyKey(stored.categories) === expected) return { ok: true, tree: stored };
+  }
+  return { ok: false, error: "Storage no confirmó el cambio de jerarquía." };
+}
+
+function hierarchyKey(categories: StoreCategorySlice[]) {
+  return JSON.stringify(
+    categories.map((item) => [item.id, item.children.map((child) => child.id)]),
+  );
 }

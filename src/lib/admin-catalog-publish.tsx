@@ -9,12 +9,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import { useCatalog } from "@/lib/offers";
 import { useStoreConfig } from "@/config/store-config";
 import {
   catalogTreeIsPending,
-  publishQueuedCatalogTree,
-  pushCatalogTree,
+  persistPublishedCatalogTree,
   setCatalogTreePublishHold,
   subscribeCatalogTreeQueue,
 } from "@/lib/store-catalog-tree/client";
@@ -34,6 +34,7 @@ export function useAdminCatalogPublish() {
 }
 
 export function AdminCatalogPublishProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const { config } = useStoreConfig();
   const { placements } = useCatalog();
   const [pending, setPending] = useState(false);
@@ -70,19 +71,18 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
   const publish = useCallback(async () => {
     setPublishing(true);
     setError(null);
-    pushCatalogTree({
-      categories: configRef.current,
-      placements: placementsRef.current,
-    });
-    const result = await publishQueuedCatalogTree();
-    setPublishing(false);
-    if (!result.ok) {
-      setError(result.error ?? "No se pudieron publicar los cambios.");
+    try {
+      await persistPublishedCatalogTree(configRef.current, placementsRef.current);
+      router.refresh();
+      setLeaveOpen(false);
+      return true;
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "No se pudieron publicar los cambios.");
       return false;
+    } finally {
+      setPublishing(false);
     }
-    setLeaveOpen(false);
-    return true;
-  }, []);
+  }, [router]);
 
   const requestLeave = useCallback((next: () => void) => {
     if (!catalogTreeIsPending()) {

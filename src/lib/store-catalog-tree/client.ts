@@ -1,6 +1,12 @@
 import type { StoreCategorySlice } from "@/services/taller-gestio/categories";
 import type { StoreProductPlacement } from "@/lib/store-product-placements";
 
+function hierarchySignature(categories: StoreCategorySlice[]) {
+  return JSON.stringify(
+    categories.map((item) => [item.id, item.children.map((child) => child.id)]),
+  );
+}
+
 type CatalogTreePatch = {
   categories?: unknown;
   placements?: unknown;
@@ -10,6 +16,7 @@ let queued: CatalogTreePatch | null = null;
 let writing = false;
 let holdPublish = false;
 let extraDirty = false;
+let skipPullUntil = 0;
 const listeners = new Set<() => void>();
 
 function notifyQueue() {
@@ -23,6 +30,10 @@ export function subscribeCatalogTreeQueue(listener: () => void) {
 
 export function catalogTreeIsPending() {
   return queued !== null || extraDirty;
+}
+
+export function catalogTreeWroteRecently() {
+  return Date.now() < skipPullUntil;
 }
 
 export function markAdminCatalogDirty() {
@@ -49,25 +60,41 @@ export function syncQueuedCategories(categories: StoreCategorySlice[]) {
   notifyQueue();
 }
 
-export async function persistPublishedCatalogTree(categories: StoreCategorySlice[]) {
-  const response = await fetch("/api/store-catalog-tree", {
-    method: "PATCH",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    cache: "no-store",
-    body: JSON.stringify({ action: "replace", categories }),
-  });
-  let body: { ok?: boolean; error?: string; categories?: StoreCategorySlice[] } = {};
-  try {
-    body = (await response.json()) as typeof body;
-  } catch {
-    body = {};
+export async function persistPublishedCatalogTree(
+  categories: StoreCategorySlice[],
+  placements?: Record<string, StoreProductPlacement>,
+) {
+  skipPullUntil = Date.now() + 25000;
+  queued = {
+    ...(queued ?? {}),
+    categories,
+    ...(placements ? { placements } : {}),
+  };
+  notifyQueue();
+  const result = await flushCatalogTree({ force: true });
+  if (!result.ok) {
+    extraDirty = true;
+    notifyQueue();
+    throw new Error(result.error || "No se pudo guardar la jerarquía.");
   }
-  if (!response.ok || !body.ok) {
-    throw new Error(body.error || "No se pudo guardar la jerarquía.");
+  let confirmed: StoreCategorySlice[] | undefined;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+    const remote = await fetchCatalogTree();
+    if (remote && hierarchySignature(remote.categories) === hierarchySignature(categories)) {
+      confirmed = remote.categories;
+      break;
+    }
   }
-  if (Array.isArray(body.categories)) syncQueuedCategories(body.categories);
-  return body;
+  if (!confirmed) {
+    extraDirty = true;
+    notifyQueue();
+    throw new Error("Storage no confirmó el cambio de jerarquía.");
+  }
+  extraDirty = false;
+  syncQueuedCategories(confirmed);
+  notifyQueue();
+  return { ok: true as const, categories: confirmed };
 }
 
 export async function promotePublishedSubcategory(parentId: string, childId: string) {
