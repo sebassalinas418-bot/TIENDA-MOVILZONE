@@ -100,7 +100,7 @@ function tickProductDragScroll() {
   dragScrollFrame = requestAnimationFrame(tickProductDragScroll);
 }
 
-function onProductDragScrollOver(event: DragEvent) {
+function onProductDragScrollOver(event: globalThis.DragEvent) {
   const y = event.clientY;
   if (y < DRAG_SCROLL_EDGE) dragScrollDir = -DRAG_SCROLL_STEP;
   else if (y > window.innerHeight - DRAG_SCROLL_EDGE) dragScrollDir = DRAG_SCROLL_STEP;
