@@ -11,7 +11,6 @@ import {
 import { usePathname } from "next/navigation";
 import { LoginPrompt } from "@/components/login-prompt";
 import { useStoreConfig } from "@/config/store-config";
-import { useAdminCatalogPublish } from "@/lib/admin-catalog-publish";
 import { emitAdminCatalogFilter } from "@/lib/admin-catalog-search";
 import { readSession } from "@/lib/session";
 
@@ -116,7 +115,6 @@ function MobileMenuButtonLive({ openDrawer }: { openDrawer: () => void }) {
 
 function MobileDrawer({ open, onClose, admin = false }: { open: boolean; onClose: () => void; admin?: boolean }) {
   const { config } = useStoreConfig();
-  const publish = useAdminCatalogPublish();
   const [tab, setTab] = useState<"categorias" | "menu">("categorias");
   const [expanded, setExpanded] = useState<string[]>([]);
 
@@ -137,16 +135,8 @@ function MobileDrawer({ open, onClose, admin = false }: { open: boolean; onClose
   if (!open) return null;
 
   function go(href: string) {
-    const leave = () => {
-      onClose();
-      window.location.assign(href);
-    };
-    if (publish?.pending) {
-      onClose();
-      publish.requestLeave(() => window.location.assign(href));
-      return;
-    }
-    leave();
+    onClose();
+    window.location.assign(href);
   }
 
   function pickCategory(next: Parameters<typeof emitAdminCatalogFilter>[0]) {

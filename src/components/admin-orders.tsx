@@ -8,7 +8,6 @@ import { AdminCustomers } from "@/components/admin-customers";
 import { AdminRedes } from "@/components/admin-redes";
 import { StoreCatalog } from "@/components/store-catalog";
 import { SiteFrame } from "@/components/site-frame";
-import { useAdminCatalogPublish } from "@/lib/admin-catalog-publish";
 import { AdminCatalogSearchProvider } from "@/lib/admin-catalog-search";
 import { describeStock, formatPrice } from "@/data/products";
 import { useAdminAccess } from "@/lib/admin-access";
@@ -107,8 +106,6 @@ function AdminShell({
   section: AdminSection;
   onSection: (section: AdminSection) => void;
 }) {
-  const publish = useAdminCatalogPublish();
-
   return (
     <SiteFrame hideFooter>
       <header className="border-b border-gray-100 bg-white/90">
@@ -133,10 +130,6 @@ function AdminShell({
                 type="button"
                 onClick={() => {
                   if (id === section) return;
-                  if (section === "tienda") {
-                    publish?.requestLeave(() => onSection(id));
-                    return;
-                  }
                   onSection(id);
                 }}
                 className={`shrink-0 rounded-full px-3.5 py-2 text-sm font-semibold ${
