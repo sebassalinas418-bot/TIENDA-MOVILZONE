@@ -43,7 +43,7 @@ export function ProductCard({
       draggable={draggable}
       onDragStart={onDragStart}
       onClick={openProduct}
-      className={`relative flex h-full min-w-0 cursor-pointer flex-col rounded-lg border bg-white p-1.5 shadow-sm transition-shadow duration-300 hover:shadow-md sm:rounded-2xl sm:p-3 ${
+      className={`relative flex h-full min-w-0 cursor-pointer flex-col rounded-lg border bg-white p-1.5 shadow-sm transition-shadow duration-300 hover:shadow-md sm:rounded-2xl sm:p-2 ${
         hidden ? "border-dashed border-neutral-300" : "border-gray-100"
       } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
     >
@@ -123,7 +123,7 @@ export function ProductCard({
       <h3
         className={soldOutStrikeClass(
           soldOut || hidden,
-          "mt-0.5 line-clamp-2 pr-1 text-[12px] leading-snug font-semibold text-neutral-950 sm:mt-1 sm:pr-2 sm:text-base",
+          "mt-0.5 line-clamp-2 pr-1 text-[12px] leading-snug font-semibold text-neutral-950 sm:mt-1 sm:pr-2 sm:text-sm",
         )}
       >
         {product.title}
@@ -137,7 +137,7 @@ export function ProductCard({
               onClick={onEdit}
               className={soldOutStrikeClass(
                 soldOut,
-                `text-left font-extrabold tracking-tight text-neutral-950 underline-offset-2 hover:text-sky-700 hover:underline ${product.onSale ? "text-sm sm:text-xl" : "text-xs sm:text-lg"}`,
+                `text-left font-extrabold tracking-tight text-neutral-950 underline-offset-2 hover:text-sky-700 hover:underline ${product.onSale ? "text-sm sm:text-lg" : "text-xs sm:text-base"}`,
               )}
             >
               {formatPrice(product.salePrice)}
@@ -146,7 +146,7 @@ export function ProductCard({
             <p
               className={soldOutStrikeClass(
                 soldOut,
-                `font-extrabold tracking-tight text-neutral-950 ${product.onSale ? "text-sm sm:text-xl" : "text-xs sm:text-lg"}`,
+                `font-extrabold tracking-tight text-neutral-950 ${product.onSale ? "text-sm sm:text-lg" : "text-xs sm:text-base"}`,
               )}
             >
               {formatPrice(product.salePrice)}
