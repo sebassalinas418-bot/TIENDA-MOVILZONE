@@ -52,7 +52,10 @@ export function AdminCatalogPublishProvider({ children }: { children: ReactNode 
       queueMicrotask(() => setPending(catalogTreeHasUnsavedChanges(configRef.current)));
     };
     syncPending();
-    return subscribeCatalogTreeQueue(syncPending);
+    const stop = subscribeCatalogTreeQueue(syncPending);
+    return () => {
+      stop();
+    };
   }, []);
 
   useEffect(() => {
