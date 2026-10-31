@@ -230,6 +230,20 @@ export function keepExistingStoreChildren(
   })
 }
 
+/** Tampoco puede borrar una categoría principal creada en la tienda. */
+export function keepExistingStoreNodes(
+  current: StoreCategorySlice[],
+  incoming: StoreCategorySlice[],
+) {
+  const merged = keepExistingStoreChildren(current, incoming)
+  const extras = current.filter(
+    (item) =>
+      !isTallerOrigin(item.origin) &&
+      !merged.some((entry) => entry.id === item.id),
+  )
+  return extras.length ? [...merged, ...extras] : merged
+}
+
 export function remapCablesPlacements<T extends { categoryId: string; subcategoryId?: string }>(
   placements: Record<string, T>,
 ): Record<string, T> {

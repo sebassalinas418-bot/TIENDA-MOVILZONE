@@ -553,7 +553,7 @@ export function CatalogProvider({
 
   useEffect(() => {
     if (!remote?.length) return;
-    if (catalogTreeIsPending()) return;
+    if (catalogTreeIsPending() || catalogTreeWroteRecently()) return;
     const liveNames = [
       ...new Set([...liveCategoryNamesRef.current, ...remote.map((product) => product.category)]),
     ].filter((name) => name.trim());

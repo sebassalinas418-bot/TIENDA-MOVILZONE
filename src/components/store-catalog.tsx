@@ -28,12 +28,15 @@ import { isSessionVerified, readSession, SESSION_EVENT, signOut, type DemoSessio
 import { storeSearchPath } from "@/lib/store-search-path";
 import {
   deletePublishedSubcategory,
+  markCatalogTreeDirty,
   persistPublishedCatalogTree,
   promotePublishedSubcategory,
+  snapshotPublishedCategories,
 } from "@/lib/store-catalog-tree/client";
 import {
   collectCategoryFilterIds,
   isTallerOrigin,
+  keepExistingStoreNodes,
   nestTallerCategory,
   promoteChildToTopLevel,
   remapPlacementsAfterPromote,
@@ -515,12 +518,14 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
   ) {
     try {
       const body = await persistPublishedCatalogTree(next, nextPlacements);
-      if (Array.isArray(body.categories)) {
-        updateConfig({ categories: body.categories }, { persist: false });
-      }
-      router.refresh();
+      const confirmed = Array.isArray(body.categories) && body.categories.length
+        ? keepExistingStoreNodes(next, body.categories)
+        : next;
+      updateConfig({ categories: confirmed }, { persist: false });
+      snapshotPublishedCategories(confirmed);
     } catch {
-      updateConfig({ categories: previous }, { persist: false });
+      updateConfig({ categories: next }, { persist: false });
+      markCatalogTreeDirty();
     }
   }
 

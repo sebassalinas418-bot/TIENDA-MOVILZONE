@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import {
   detachCablesAsTopLevel,
-  keepExistingStoreChildren,
+  keepExistingStoreNodes,
   remapCablesPlacements,
   stripCargadoresLeftoverChildren,
   type CategoryOrigin,
@@ -259,7 +259,7 @@ export async function writeStoreCatalogTree(
     patch.categories !== undefined
       ? options?.replace
         ? incoming.categories
-        : keepExistingStoreChildren(current.categories, incoming.categories)
+        : keepExistingStoreNodes(current.categories, incoming.categories)
       : current.categories
   const tree: StoreCatalogTree = {
     categories: incomingCategories,

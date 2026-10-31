@@ -1,5 +1,6 @@
 import {
   detachCablesAsTopLevel,
+  keepExistingStoreNodes,
   remapCablesPlacements,
   stripCargadoresLeftoverChildren,
   type StoreCategorySlice,
@@ -108,7 +109,10 @@ export async function persistPublishedCatalogTree(
     notifyQueue();
     throw new Error(result.error || "No se pudo guardar la jerarquía.");
   }
-  const confirmed = result.categories?.length ? result.categories : nextCategories;
+  const confirmed = keepExistingStoreNodes(
+    nextCategories,
+    result.categories?.length ? result.categories : nextCategories,
+  );
   extraDirty = false;
   snapshotPublishedCategories(confirmed);
   syncQueuedCategories(confirmed);
