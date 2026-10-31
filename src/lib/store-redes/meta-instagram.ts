@@ -1,45 +1,9 @@
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
 import { composeInstagramCaption } from "@/lib/store-free-photos/from-recognition";
 import type { SocialPost } from "@/lib/store-redes/types";
 
 const META_KEYS = ["META_IG_USER_ID", "META_PAGE_ACCESS_TOKEN", "INSTAGRAM_IG_USER_ID", "INSTAGRAM_ACCESS_TOKEN"] as const;
 
-function hasMetaEnv() {
-  return Boolean(
-    (process.env["META_IG_USER_ID"] || process.env["INSTAGRAM_IG_USER_ID"])?.trim() &&
-      (process.env["META_PAGE_ACCESS_TOKEN"] || process.env["INSTAGRAM_ACCESS_TOKEN"])?.trim(),
-  );
-}
-
-function hydrateMetaEnv() {
-  if (hasMetaEnv()) return;
-  for (const fileName of [".env.local", ".env"]) {
-    try {
-      const full = join(process.cwd(), fileName);
-      if (!existsSync(full)) continue;
-      for (const raw of readFileSync(full, "utf8").split(/\r?\n/)) {
-        const line = raw.trim();
-        if (!line || line.startsWith("#")) continue;
-        const cut = line.replace(/^export\s+/, "").match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-        if (!cut) continue;
-        const name = cut[1];
-        if (!META_KEYS.includes(name as (typeof META_KEYS)[number])) continue;
-        if (process.env[name]?.trim()) continue;
-        let value = cut[2].trim();
-        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-          value = value.slice(1, -1);
-        }
-        process.env[name] = value.replace(/\s+/g, "");
-      }
-    } catch {
-      /* el archivo de env es opcional */
-    }
-  }
-}
-
 function envMeta(name: (typeof META_KEYS)[number]) {
-  hydrateMetaEnv();
   return (process.env[name] || "").trim();
 }
 
