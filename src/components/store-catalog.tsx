@@ -77,6 +77,46 @@ function writeProductDrag(event: DragEvent, productId: string) {
   event.dataTransfer.effectAllowed = "move";
 }
 
+const DRAG_SCROLL_EDGE = 72;
+const DRAG_SCROLL_STEP = 18;
+let dragScrollDir = 0;
+let dragScrollFrame = 0;
+
+function stopProductDragScroll() {
+  dragScrollDir = 0;
+  if (dragScrollFrame) {
+    cancelAnimationFrame(dragScrollFrame);
+    dragScrollFrame = 0;
+  }
+  window.removeEventListener("dragover", onProductDragScrollOver);
+  window.removeEventListener("dragend", stopProductDragScroll);
+  window.removeEventListener("drop", stopProductDragScroll);
+}
+
+function tickProductDragScroll() {
+  dragScrollFrame = 0;
+  if (!dragScrollDir) return;
+  window.scrollBy(0, dragScrollDir);
+  dragScrollFrame = requestAnimationFrame(tickProductDragScroll);
+}
+
+function onProductDragScrollOver(event: DragEvent) {
+  const y = event.clientY;
+  if (y < DRAG_SCROLL_EDGE) dragScrollDir = -DRAG_SCROLL_STEP;
+  else if (y > window.innerHeight - DRAG_SCROLL_EDGE) dragScrollDir = DRAG_SCROLL_STEP;
+  else dragScrollDir = 0;
+  if (dragScrollDir && !dragScrollFrame) {
+    dragScrollFrame = requestAnimationFrame(tickProductDragScroll);
+  }
+}
+
+function startProductDragScroll() {
+  stopProductDragScroll();
+  window.addEventListener("dragover", onProductDragScrollOver);
+  window.addEventListener("dragend", stopProductDragScroll);
+  window.addEventListener("drop", stopProductDragScroll);
+}
+
 function readProductDrag(event: DragEvent): string | null {
   const raw = event.dataTransfer.getData(CAT_DRAG);
   if (!raw.startsWith("mzprod:")) return null;
@@ -945,7 +985,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
             className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-neutral-950 outline-none placeholder:text-neutral-600 focus:border-sky-500"
           />
         </label>
-        <ul className={`mt-2 space-y-0.5 ${admin ? "max-h-[36vh] overflow-y-auto overscroll-contain pr-1 lg:max-h-[70vh]" : "space-y-1"}`}>
+        <ul className={`mt-2 space-y-0.5 ${admin ? "max-h-[36vh] overflow-y-auto overscroll-contain pr-1 lg:max-h-none lg:overflow-visible" : "space-y-1"}`}>
           <li>
             <button
               type="button"
@@ -1245,7 +1285,9 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
         )}
 
         <div className={`mt-3 sm:mt-6 ${admin ? "grid gap-3 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8" : "lg:grid lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8"}`}>
-          <aside className="hidden lg:block">{filters}</aside>
+          <aside className="hidden lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
+            {filters}
+          </aside>
 
           <div>
             <div className="flex items-center justify-between gap-3">
@@ -1467,6 +1509,7 @@ export function StoreCatalog({ admin = false }: { admin?: boolean }) {
                         admin
                           ? (event) => {
                               writeProductDrag(event, product.id);
+                              startProductDragScroll();
                             }
                           : undefined
                       }
